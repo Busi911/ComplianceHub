@@ -35,12 +35,12 @@ const STATUS_COLOR: Record<ImportRow["status"], string> = {
   error: "text-red-700 bg-red-50",
 };
 
-const SAMPLE_CSV = `SKU;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis (EUR);Netto-Gewicht (g);Brutto-Gewicht (g);Netto-Länge (mm);Netto-Breite (mm);Netto-Höhe (mm);Brutto-Länge (mm);Brutto-Breite (mm);Brutto-Höhe (mm)
-WD-HDD-001;ART-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32
-SAM-SSD-002;ART-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15
-LG-MON-003;ART-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120
-LOG-MOU-004;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65
-TPL-CAB-005;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30`;
+const SAMPLE_CSV = `SKU;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis (EUR);Netto-Gewicht (g);Brutto-Gewicht (g);Netto-Länge (mm);Netto-Breite (mm);Netto-Höhe (mm);Brutto-Länge (mm);Brutto-Breite (mm);Brutto-Höhe (mm);Jahresabsatz (Stk.)
+WD-HDD-001;ART-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32;250
+SAM-SSD-002;ART-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15;500
+LG-MON-003;ART-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120;80
+LOG-MOU-004;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65;150
+TPL-CAB-005;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30;1200`;
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);

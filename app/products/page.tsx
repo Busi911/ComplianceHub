@@ -195,31 +195,15 @@ function ProductsPageInner() {
               <tr className="bg-gray-50 text-left">
                 <th className="px-4 py-2.5 font-medium text-gray-600">SKU</th>
                 <th className="px-4 py-2.5 font-medium text-gray-600">Name</th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Kategorie
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">Marke</th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  EK
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  Netto
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  Kunststoff
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  Papier
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Konfidenz
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Status
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Qualität
-                </th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden md:table-cell">Kategorie</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden lg:table-cell">Marke</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden lg:table-cell">EK</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden xl:table-cell">Netto</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden sm:table-cell">Kunststoff</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden sm:table-cell">Papier</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden md:table-cell">Konfidenz</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600">Status</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden lg:table-cell">Qualität</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -279,7 +263,7 @@ function ProductsPageInner() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
                         {product.category ?? "—"}
                         {product.subcategory && (
                           <span className="text-xs text-gray-400 block">
@@ -287,26 +271,26 @@ function ProductsPageInner() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
                         {product.brand ?? product.manufacturer ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden lg:table-cell">
                         {fmtEur(product.ekPrice)}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden xl:table-cell">
                         {fmt(product.netWeightG)}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden sm:table-cell">
                         {product.packagingProfile
                           ? fmt(product.packagingProfile.currentPlasticG)
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden sm:table-cell">
                         {product.packagingProfile
                           ? fmt(product.packagingProfile.currentPaperG)
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 min-w-[100px]">
+                      <td className="px-4 py-3 min-w-[100px] hidden md:table-cell">
                         <ConfidenceBar
                           score={
                             product.packagingProfile?.confidenceScore ?? null
@@ -322,7 +306,7 @@ function ProductsPageInner() {
                           size="sm"
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 hidden lg:table-cell">
                         <DataQualityBadge score={quality.score} />
                       </td>
                     </tr>

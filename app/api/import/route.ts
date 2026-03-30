@@ -90,6 +90,12 @@ const FIELD_MAP: Record<string, string> = {
   grossheight: "grossHeightMm",
   quelle: "source",
   source: "source",
+  jahresabsatz: "annualUnitsSold",
+  "jahresabsatz (stk)": "annualUnitsSold",
+  "jahresabsatz (stk.)": "annualUnitsSold",
+  "annual units sold": "annualUnitsSold",
+  "absatz stk": "annualUnitsSold",
+  annualunitssold: "annualUnitsSold",
 };
 
 function normalizeKey(key: string): string {
@@ -113,6 +119,9 @@ function mapRow(row: Record<string, string>): Record<string, string | number | n
       const trimmed = value?.trim() ?? "";
       if (trimmed === "" || trimmed === "-" || trimmed === "n/a") {
         mapped[field] = null;
+      } else if (field === "annualUnitsSold") {
+        const num = parseInt(trimmed.replace(",", "."), 10);
+        mapped[field] = isNaN(num) ? null : num;
       } else if (
         [
           "ekPrice",
@@ -238,6 +247,7 @@ export async function POST(request: NextRequest) {
             grossLengthMm: mapped.grossLengthMm as number | null,
             grossWidthMm: mapped.grossWidthMm as number | null,
             grossHeightMm: mapped.grossHeightMm as number | null,
+            annualUnitsSold: mapped.annualUnitsSold as number | null,
             source: (mapped.source as string) || null,
             importBatchId: batch.id,
           };

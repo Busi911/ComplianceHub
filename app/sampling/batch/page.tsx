@@ -164,7 +164,7 @@ export default function BatchSamplingPage() {
           value={globalSampledBy}
           onChange={(e) => setGlobalSampledBy(e.target.value)}
           placeholder="Name des Mitarbeiters"
-          className="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-green-400 w-64"
+          className="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-green-400 w-full max-w-xs"
         />
         <span className="text-xs text-gray-400">
           Wird für alle Zeilen übernommen, sofern kein individueller Name eingetragen ist.
@@ -180,18 +180,18 @@ export default function BatchSamplingPage() {
               <thead>
                 <tr className="bg-gray-50 text-left sticky top-0">
                   <th className="px-3 py-2.5 font-medium text-gray-600">SKU / Produkt</th>
-                  <th className="px-3 py-2.5 font-medium text-gray-600">Kategorie</th>
-                  <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-28">
+                  <th className="px-3 py-2.5 font-medium text-gray-600 hidden md:table-cell">Kategorie</th>
+                  <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-24 md:w-28">
                     Kunststoff (g)
                   </th>
-                  <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-28">
+                  <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-24 md:w-28">
                     Papier (g)
                   </th>
-                  <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-28">
+                  <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-24 md:w-28 hidden sm:table-cell">
                     Gesamt (g)
                   </th>
-                  <th className="px-3 py-2.5 font-medium text-gray-600 w-32">Von</th>
-                  <th className="px-3 py-2.5 font-medium text-gray-600 w-36">Notiz</th>
+                  <th className="px-3 py-2.5 font-medium text-gray-600 w-32 hidden md:table-cell">Von</th>
+                  <th className="px-3 py-2.5 font-medium text-gray-600 w-36 hidden lg:table-cell">Notiz</th>
                   <th className="px-3 py-2.5 font-medium text-gray-600 w-24">Aktion</th>
                 </tr>
               </thead>
@@ -218,7 +218,7 @@ export default function BatchSamplingPage() {
                         {row.product.productName}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-500">
+                    <td className="px-3 py-2 text-xs text-gray-500 hidden md:table-cell">
                       {row.product.category}
                       {row.product.brand && (
                         <div className="text-gray-400">{row.product.brand}</div>
@@ -248,7 +248,7 @@ export default function BatchSamplingPage() {
                         className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center outline-none focus:border-green-400 disabled:bg-gray-100"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 hidden sm:table-cell">
                       <input
                         type="number"
                         step="0.1"
@@ -260,7 +260,7 @@ export default function BatchSamplingPage() {
                         className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center outline-none focus:border-gray-400 disabled:bg-gray-100"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 hidden md:table-cell">
                       <input
                         type="text"
                         value={row.sampledBy}
@@ -270,7 +270,7 @@ export default function BatchSamplingPage() {
                         className="w-full border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:border-gray-400 disabled:bg-gray-100"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 hidden lg:table-cell">
                       <input
                         type="text"
                         value={row.notes}

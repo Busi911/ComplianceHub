@@ -49,6 +49,7 @@ interface Product {
   grossLengthMm: number | null;
   grossWidthMm: number | null;
   grossHeightMm: number | null;
+  annualUnitsSold: number | null;
   source: string | null;
   createdAt: string;
   updatedAt: string;
@@ -143,6 +144,7 @@ type EditFormData = {
   grossLengthMm: string;
   grossWidthMm: string;
   grossHeightMm: string;
+  annualUnitsSold: string;
   source: string;
 };
 
@@ -173,6 +175,7 @@ function productToForm(p: Product): EditFormData {
     grossLengthMm: p.grossLengthMm != null ? String(p.grossLengthMm) : "",
     grossWidthMm: p.grossWidthMm != null ? String(p.grossWidthMm) : "",
     grossHeightMm: p.grossHeightMm != null ? String(p.grossHeightMm) : "",
+    annualUnitsSold: p.annualUnitsSold != null ? String(p.annualUnitsSold) : "",
     source: p.source ?? "",
   };
 }
@@ -380,6 +383,7 @@ export default function ProductDetailPage() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="Jahresabsatz (Stk.)" name="annualUnitsSold" value={editForm.annualUnitsSold} onChange={handleEditChange} type="number" placeholder="z. B. 500" />
               <InputField label="Quelle" name="source" value={editForm.source} onChange={handleEditChange} placeholder="z. B. ERP-Export" />
             </div>
             <div className="flex gap-3 pt-2">

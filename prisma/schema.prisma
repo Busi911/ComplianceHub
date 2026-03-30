@@ -27,6 +27,7 @@ model Product {
   grossLengthMm    Float?
   grossWidthMm     Float?
   grossHeightMm    Float?
+  annualUnitsSold  Int?
   source           String?
   importBatchId    String?
   createdAt        DateTime @default(now())
