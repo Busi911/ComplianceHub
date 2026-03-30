@@ -34,6 +34,7 @@ interface EstimateHistory {
 interface Product {
   id: string;
   sku: string;
+  internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
   brand: string | null;
@@ -127,6 +128,7 @@ function InputField({
 }
 
 type EditFormData = {
+  internalArticleNumber: string;
   productName: string;
   manufacturer: string;
   brand: string;
@@ -156,6 +158,7 @@ type SamplingFormData = {
 
 function productToForm(p: Product): EditFormData {
   return {
+    internalArticleNumber: p.internalArticleNumber ?? "",
     productName: p.productName ?? "",
     manufacturer: p.manufacturer ?? "",
     brand: p.brand ?? "",
@@ -356,6 +359,7 @@ export default function ProductDetailPage() {
           <form onSubmit={submitEdit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <InputField label="Produktname" name="productName" value={editForm.productName} onChange={handleEditChange} required />
+              <InputField label="Interne Art.-Nr." name="internalArticleNumber" value={editForm.internalArticleNumber} onChange={handleEditChange} placeholder="z. B. 10012345" />
               <InputField label="Hersteller" name="manufacturer" value={editForm.manufacturer} onChange={handleEditChange} />
               <InputField label="Marke" name="brand" value={editForm.brand} onChange={handleEditChange} />
               <InputField label="Kategorie" name="category" value={editForm.category} onChange={handleEditChange} />
@@ -420,6 +424,7 @@ export default function ProductDetailPage() {
           </div>
           <dl className="grid grid-cols-2 gap-3">
             <Field label="SKU" value={product.sku} mono />
+            <Field label="Interne Art.-Nr." value={product.internalArticleNumber} mono />
             <Field label="Produktname" value={product.productName} />
             <Field label="Hersteller" value={product.manufacturer} />
             <Field label="Marke" value={product.brand} />

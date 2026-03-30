@@ -250,7 +250,7 @@ function computeSimilarityConfidence(
       else if (priceDiff < 0.3) score += 1;
     }
 
-    // Weight similarity
+    // Gross weight similarity
     if (product.grossWeightG && similar.grossWeightG) {
       const weightDiff =
         Math.abs(product.grossWeightG - similar.grossWeightG) /
@@ -259,12 +259,41 @@ function computeSimilarityConfidence(
       else if (weightDiff < 0.25) score += 1;
     }
 
+    // Volume similarity (packaging volume = L×B×H) — better proxy for packaging material amount
+    const pVol = product.grossLengthMm && product.grossWidthMm && product.grossHeightMm
+      ? product.grossLengthMm * product.grossWidthMm * product.grossHeightMm
+      : null;
+    const sVol = similar.grossLengthMm && similar.grossWidthMm && similar.grossHeightMm
+      ? similar.grossLengthMm * similar.grossWidthMm * similar.grossHeightMm
+      : null;
+    if (pVol && sVol) {
+      const volDiff = Math.abs(pVol - sVol) / pVol;
+      if (volDiff < 0.1) score += 3;
+      else if (volDiff < 0.25) score += 2;
+      else if (volDiff < 0.5) score += 1;
+    }
+
+    // Packaging ratio: (grossWeight - netWeight) / grossVolume — similar ratio = similar packaging density
+    const pPackW = product.grossWeightG && product.netWeightG
+      ? product.grossWeightG - product.netWeightG : null;
+    const sPackW = similar.grossWeightG && similar.netWeightG
+      ? similar.grossWeightG - similar.netWeightG : null;
+    if (pPackW && sPackW && pVol && sVol) {
+      const pRatio = pPackW / pVol;
+      const sRatio = sPackW / sVol;
+      if (pRatio > 0 && sRatio > 0) {
+        const ratioDiff = Math.abs(pRatio - sRatio) / pRatio;
+        if (ratioDiff < 0.15) score += 2;
+        else if (ratioDiff < 0.35) score += 1;
+      }
+    }
+
     maxScore = Math.max(maxScore, score);
   }
 
-  // Max possible score is ~12, map to 0.2–0.75
-  const normalized = Math.min(maxScore / 12, 1);
-  return Math.round((0.2 + normalized * 0.55) * 100) / 100;
+  // Max possible score is ~20 (with volume+ratio), map to 0.2–0.78
+  const normalized = Math.min(maxScore / 20, 1);
+  return Math.round((0.2 + normalized * 0.58) * 100) / 100;
 }
 
 /**

@@ -7,6 +7,7 @@ export interface DataQualityResult {
 
 export interface ProductInput {
   sku?: string;
+  internalArticleNumber?: string | null;
   productName?: string;
   manufacturer?: string;
   brand?: string;

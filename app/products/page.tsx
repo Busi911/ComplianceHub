@@ -11,6 +11,7 @@ import { computeDataQuality } from "@/lib/validation";
 interface Product {
   id: string;
   sku: string;
+  internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
   brand: string | null;
@@ -105,12 +106,21 @@ function ProductsPageInner() {
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Produkte</h1>
-        <Link
-          href="/import"
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-        >
-          + CSV importieren
-        </Link>
+        <div className="flex gap-2">
+          <a
+            href="/api/export"
+            download
+            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            ↓ CSV exportieren
+          </a>
+          <Link
+            href="/import"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            + CSV importieren
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -248,6 +258,11 @@ function ProductsPageInner() {
                         >
                           {product.sku}
                         </Link>
+                        {product.internalArticleNumber && (
+                          <div className="text-xs text-gray-400 font-mono">
+                            {product.internalArticleNumber}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 max-w-[200px]">
                         <Link

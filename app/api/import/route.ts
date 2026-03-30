@@ -32,6 +32,15 @@ const FIELD_MAP: Record<string, string> = {
   "art.nr": "sku",
   artikelnummer: "sku",
   "artikel-nr": "sku",
+  "interne artikelnummer": "internalArticleNumber",
+  "interne art.-nr": "internalArticleNumber",
+  "int. art.-nr": "internalArticleNumber",
+  "int.art.nr": "internalArticleNumber",
+  "interne nr": "internalArticleNumber",
+  "interne nr.": "internalArticleNumber",
+  "intern": "internalArticleNumber",
+  "artikel nr intern": "internalArticleNumber",
+  internalarticlenumber: "internalArticleNumber",
   hersteller: "manufacturer",
   manufacturer: "manufacturer",
   marke: "brand",
@@ -207,6 +216,7 @@ export async function POST(request: NextRequest) {
         try {
           const upsertData = {
             sku: mapped.sku as string,
+            internalArticleNumber: (mapped.internalArticleNumber as string) || null,
             productName: (mapped.productName as string) || "",
             manufacturer: (mapped.manufacturer as string) || null,
             brand: (mapped.brand as string) || null,

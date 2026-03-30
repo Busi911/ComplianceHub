@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/products", label: "Produkte" },
+  { href: "/sampling", label: "Stichproben" },
   { href: "/import", label: "Import" },
+  { href: "/estimation-rules", label: "Schätzlogik" },
 ];
 
 export function NavBar() {
