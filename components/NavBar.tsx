@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/products", label: "Produkte" },
-  { href: "/sampling", label: "Stichproben" },
-  { href: "/import", label: "Import" },
-  { href: "/estimation-rules", label: "Schätzlogik" },
+  { href: "/dashboard", label: "Dashboard", exact: false },
+  { href: "/products", label: "Produkte", exact: false },
+  { href: "/sampling", label: "Stichproben", exact: true },
+  { href: "/sampling/session", label: "Wiegesession", exact: false },
+  { href: "/import", label: "Import", exact: false },
+  { href: "/estimation-rules", label: "Schätzlogik", exact: false },
 ];
 
 export function NavBar() {
@@ -24,7 +25,9 @@ export function NavBar() {
             </Link>
             <div className="flex items-center gap-1">
               {NAV_ITEMS.map((item) => {
-                const isActive = pathname.startsWith(item.href);
+                const isActive = item.exact
+                  ? pathname === item.href
+                  : pathname.startsWith(item.href);
                 return (
                   <Link
                     key={item.href}

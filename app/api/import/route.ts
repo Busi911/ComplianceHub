@@ -93,7 +93,14 @@ const FIELD_MAP: Record<string, string> = {
 };
 
 function normalizeKey(key: string): string {
-  return key.trim().toLowerCase().replace(/\s+/g, " ");
+  // Strip parenthetical unit suffixes like "(g)", "(mm)", "(EUR)", "(€)" so
+  // column headers with units ("Netto-Gewicht (g)") match the same as without.
+  return key
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*$/, "") // remove trailing "(...)"
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function mapRow(row: Record<string, string>): Record<string, string | number | null> {

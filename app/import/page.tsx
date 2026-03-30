@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
 interface ImportRow {
@@ -35,12 +35,12 @@ const STATUS_COLOR: Record<ImportRow["status"], string> = {
   error: "text-red-700 bg-red-50",
 };
 
-const SAMPLE_CSV = `SKU;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis;Netto-Gewicht;Brutto-Gewicht;Netto-Länge;Netto-Breite;Netto-Höhe;Brutto-Länge;Brutto-Breite;Brutto-Höhe
-WD-HDD-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32
-SAM-SSD-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15
-LG-MON-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120
-LOG-MOU-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65
-TPL-CAB-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30`;
+const SAMPLE_CSV = `SKU;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis (EUR);Netto-Gewicht (g);Brutto-Gewicht (g);Netto-Länge (mm);Netto-Breite (mm);Netto-Höhe (mm);Brutto-Länge (mm);Brutto-Breite (mm);Brutto-Höhe (mm)
+WD-HDD-001;ART-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32
+SAM-SSD-002;ART-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15
+LG-MON-003;ART-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120
+LOG-MOU-004;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65
+TPL-CAB-005;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30`;
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -50,7 +50,17 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [totalMs, setTotalMs] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   function handleFile(f: File) {
     setFile(f);
@@ -75,6 +85,12 @@ export default function ImportPage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setTotalMs(null);
+    setElapsedMs(0);
+    startTimeRef.current = Date.now();
+    timerRef.current = setInterval(() => {
+      setElapsedMs(Date.now() - (startTimeRef.current ?? Date.now()));
+    }, 100);
 
     try {
       const formData = new FormData();
@@ -93,8 +109,17 @@ export default function ImportPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");
     } finally {
+      if (timerRef.current) clearInterval(timerRef.current);
+      const duration = Date.now() - (startTimeRef.current ?? Date.now());
+      setTotalMs(duration);
+      setElapsedMs(null);
       setLoading(false);
     }
+  }
+
+  function formatMs(ms: number): string {
+    if (ms < 1000) return `${ms} ms`;
+    return `${(ms / 1000).toFixed(1)} s`;
   }
 
   function downloadSample() {
@@ -211,9 +236,11 @@ export default function ImportPage() {
         {/* Field mapping info */}
         <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
           <strong className="text-gray-700">Unterstützte Spalten:</strong>{" "}
-          SKU / Art.-Nr., Produktname / Bezeichnung, Hersteller, Marke /
-          Brand, Kategorie, Unterkategorie, EK-Preis / EK Preis, Netto-Gewicht
-          (g), Brutto-Gewicht (g), Netto/Brutto L/B/H (mm).
+          SKU / Art.-Nr., Interne Art.-Nr., Produktname / Bezeichnung,
+          Hersteller, Marke / Brand, Kategorie, Unterkategorie,
+          EK-Preis (EUR), Netto-Gewicht (g), Brutto-Gewicht (g),
+          Netto/Brutto L/B/H (mm). Einheiten in Klammern in der
+          Spaltenüberschrift werden automatisch ignoriert.
           Trennzeichen: Komma oder Semikolon.
         </div>
 
@@ -224,11 +251,16 @@ export default function ImportPage() {
             className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading
-              ? "Importiert…"
+              ? `Importiert… ${elapsedMs != null ? formatMs(elapsedMs) : ""}`
               : dryRun
                 ? "Vorschau starten"
                 : "Jetzt importieren"}
           </button>
+          {totalMs != null && !loading && (
+            <span className="text-xs text-gray-400">
+              Abgeschlossen in {formatMs(totalMs)}
+            </span>
+          )}
           {file && (
             <button
               onClick={() => {
@@ -272,6 +304,9 @@ export default function ImportPage() {
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
                   {result.totalRows} Zeilen verarbeitet
+                  {totalMs != null && (
+                    <span className="text-gray-400 ml-2">· {formatMs(totalMs)}</span>
+                  )}
                 </p>
               </div>
               <div className="flex gap-4 text-sm">

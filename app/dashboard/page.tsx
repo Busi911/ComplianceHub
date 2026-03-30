@@ -18,6 +18,18 @@ interface DashboardData {
     successCount: number;
     errorCount: number;
   }[];
+  statusDistribution: {
+    IMPORTED: number;
+    ESTIMATED: number;
+    SAMPLED: number;
+    REVIEWED: number;
+  };
+  avgConfidence: number;
+  confidenceDistribution: {
+    low: number;
+    medium: number;
+    high: number;
+  };
 }
 
 function StatCard({
@@ -44,10 +56,16 @@ function StatCard({
       {subtext && <div className="text-xs text-gray-400 mt-1">{subtext}</div>}
     </div>
   );
-
   if (href) return <Link href={href}>{content}</Link>;
   return content;
 }
+
+const STATUS_CONFIG = [
+  { key: "IMPORTED" as const, label: "Importiert", color: "bg-gray-400", textColor: "text-gray-600" },
+  { key: "ESTIMATED" as const, label: "Geschätzt", color: "bg-yellow-400", textColor: "text-yellow-700" },
+  { key: "SAMPLED" as const, label: "Gemessen", color: "bg-green-500", textColor: "text-green-700" },
+  { key: "REVIEWED" as const, label: "Geprüft", color: "bg-blue-500", textColor: "text-blue-700" },
+];
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -103,6 +121,22 @@ export default function DashboardPage() {
       ? Math.round((data.productsWithSampling / data.totalProducts) * 100)
       : 0;
 
+  const statusTotal =
+    data.statusDistribution.IMPORTED +
+    data.statusDistribution.ESTIMATED +
+    data.statusDistribution.SAMPLED +
+    data.statusDistribution.REVIEWED;
+
+  const confTotal =
+    data.confidenceDistribution.low +
+    data.confidenceDistribution.medium +
+    data.confidenceDistribution.high;
+
+  const maxBatchCount = Math.max(
+    ...data.recentImportBatches.map((b) => b.successCount),
+    1
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
       <div>
@@ -144,11 +178,126 @@ export default function DashboardPage() {
           label="Fehlende Mindestdaten"
           value={data.productsMissingMinData}
           subtext="Kategorie od. Gewicht fehlt"
-          color={data.productsMissingMinData > 0 ? "text-red-600" : "text-gray-400"}
+          color={
+            data.productsMissingMinData > 0 ? "text-red-600" : "text-gray-400"
+          }
         />
       </div>
 
-      {/* Coverage bar */}
+      {/* Two-column charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Status distribution chart */}
+        <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+          <h2 className="font-semibold text-gray-900">Status-Verteilung</h2>
+          {statusTotal === 0 ? (
+            <p className="text-sm text-gray-400">Keine Daten vorhanden.</p>
+          ) : (
+            <>
+              {/* Stacked bar */}
+              <div className="flex h-6 rounded-full overflow-hidden">
+                {STATUS_CONFIG.map(({ key, color }) => {
+                  const pct =
+                    statusTotal > 0
+                      ? (data.statusDistribution[key] / statusTotal) * 100
+                      : 0;
+                  return pct > 0 ? (
+                    <div
+                      key={key}
+                      className={`${color} transition-all`}
+                      style={{ width: `${pct}%` }}
+                      title={`${key}: ${data.statusDistribution[key]}`}
+                    />
+                  ) : null;
+                })}
+              </div>
+              {/* Legend */}
+              <div className="grid grid-cols-2 gap-2">
+                {STATUS_CONFIG.map(({ key, label, color, textColor }) => {
+                  const count = data.statusDistribution[key];
+                  const pct =
+                    statusTotal > 0
+                      ? Math.round((count / statusTotal) * 100)
+                      : 0;
+                  return (
+                    <div key={key} className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-sm flex-shrink-0 ${color}`} />
+                      <div className="text-xs">
+                        <span className={`font-medium ${textColor}`}>
+                          {count}
+                        </span>
+                        <span className="text-gray-400 ml-1">
+                          {label} ({pct}%)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Confidence distribution */}
+        <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">Datenqualität (Konfidenz)</h2>
+            <span className="text-sm font-bold text-gray-700">
+              Ø {Math.round(data.avgConfidence * 100)}%
+            </span>
+          </div>
+          {confTotal === 0 ? (
+            <p className="text-sm text-gray-400">Keine Daten vorhanden.</p>
+          ) : (
+            <div className="space-y-2">
+              {[
+                {
+                  label: "Hoch (70–100%)",
+                  count: data.confidenceDistribution.high,
+                  color: "bg-green-500",
+                  textColor: "text-green-700",
+                },
+                {
+                  label: "Mittel (40–69%)",
+                  count: data.confidenceDistribution.medium,
+                  color: "bg-yellow-400",
+                  textColor: "text-yellow-700",
+                },
+                {
+                  label: "Niedrig (0–39%)",
+                  count: data.confidenceDistribution.low,
+                  color: "bg-red-400",
+                  textColor: "text-red-700",
+                },
+              ].map(({ label, count, color, textColor }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <div className="text-xs text-gray-500 w-32 flex-shrink-0">
+                    {label}
+                  </div>
+                  <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                    <div
+                      className={`h-4 rounded-full ${color} transition-all`}
+                      style={{
+                        width: `${confTotal > 0 ? (count / confTotal) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <div className={`text-xs font-medium w-8 text-right ${textColor}`}>
+                    {count}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-gray-400">
+            Mehr Stichproben-Wiegungen verbessern den Konfidenzwert.{" "}
+            <Link href="/sampling" className="text-blue-500 hover:underline">
+              Prioritätsliste öffnen →
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      {/* Sampling coverage bar */}
       <div className="bg-white rounded-lg border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-gray-900">Stichproben-Abdeckung</h2>
@@ -170,6 +319,55 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Import history chart */}
+      {data.recentImportBatches.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900">Import-Verlauf</h2>
+            <Link
+              href="/import"
+              className="text-xs text-blue-600 hover:underline"
+            >
+              + Neuer Import
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {[...data.recentImportBatches].reverse().map((batch) => {
+              const barPct = Math.round(
+                (batch.successCount / maxBatchCount) * 100
+              );
+              const hasError = batch.errorCount > 0;
+              return (
+                <div key={batch.id} className="flex items-center gap-3">
+                  <div className="text-xs text-gray-500 w-36 flex-shrink-0 truncate" title={batch.name}>
+                    {batch.name}
+                  </div>
+                  <div className="flex-1 bg-gray-100 rounded h-6 overflow-hidden relative">
+                    <div
+                      className="h-6 bg-blue-200 rounded transition-all"
+                      style={{ width: `${barPct}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center px-2">
+                      <span className="text-xs font-medium text-blue-800">
+                        {batch.successCount} Produkte
+                        {hasError && (
+                          <span className="text-red-600 ml-2">
+                            ✗ {batch.errorCount} Fehler
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400 w-24 flex-shrink-0 text-right">
+                    {new Date(batch.importedAt).toLocaleDateString("de-DE")}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Quick actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
@@ -185,6 +383,20 @@ export default function DashboardPage() {
           </div>
         </Link>
         <Link
+          href="/sampling/session"
+          className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4 hover:bg-green-100 transition-colors"
+        >
+          <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center text-white text-xl">
+            ⚖
+          </div>
+          <div>
+            <div className="font-medium text-green-900">Wiegesession</div>
+            <div className="text-xs text-green-600">
+              {data.productsWithoutSampling} Produkte ohne Messung
+            </div>
+          </div>
+        </Link>
+        <Link
           href="/products"
           className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg p-4 hover:bg-gray-100 transition-colors"
         >
@@ -196,58 +408,7 @@ export default function DashboardPage() {
             <div className="text-xs text-gray-500">Liste durchsuchen</div>
           </div>
         </Link>
-        <Link
-          href="/products?status=imported"
-          className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-4 hover:bg-yellow-100 transition-colors"
-        >
-          <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center text-white text-xl">
-            ⚡
-          </div>
-          <div>
-            <div className="font-medium text-yellow-900">Stichproben erfassen</div>
-            <div className="text-xs text-yellow-600">
-              {data.productsWithoutSampling} Produkte ohne Messung
-            </div>
-          </div>
-        </Link>
       </div>
-
-      {/* Recent imports */}
-      {data.recentImportBatches.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Letzte Importe</h2>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {data.recentImportBatches.map((batch) => (
-              <div
-                key={batch.id}
-                className="px-5 py-3 flex items-center justify-between"
-              >
-                <div>
-                  <div className="text-sm font-medium text-gray-900">
-                    {batch.name}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(batch.importedAt).toLocaleString("de-DE")} •{" "}
-                    {batch.rowCount} Zeilen
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="text-green-600 font-medium">
-                    ✓ {batch.successCount}
-                  </span>
-                  {batch.errorCount > 0 && (
-                    <span className="text-red-600 font-medium">
-                      ✗ {batch.errorCount}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

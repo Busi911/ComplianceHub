@@ -8,6 +8,8 @@ export async function GET() {
       productsWithSampling,
       productsWithEstimateOnly,
       productsImported,
+      statusSampled,
+      statusReviewed,
     ] = await Promise.all([
       prisma.product.count(),
       prisma.product.count({
@@ -19,10 +21,11 @@ export async function GET() {
       prisma.product.count({
         where: { importBatchId: { not: null } },
       }),
+      prisma.productPackagingProfile.count({ where: { status: "SAMPLED" } }),
+      prisma.productPackagingProfile.count({ where: { status: "REVIEWED" } }),
     ]);
 
-    // Products missing recommended fields (SKU + productName always required,
-    // here we count those missing category AND missing both weights)
+    // Products missing recommended fields
     const productsMissingMinData = await prisma.product.count({
       where: {
         OR: [
@@ -37,9 +40,32 @@ export async function GET() {
       },
     });
 
+    // Average confidence score across all profiles
+    const confidenceAgg = await prisma.productPackagingProfile.aggregate({
+      _avg: { confidenceScore: true },
+    });
+
+    // Confidence distribution buckets
+    const [confLow, confMed, confHigh] = await Promise.all([
+      prisma.productPackagingProfile.count({
+        where: { confidenceScore: { lt: 0.4 } },
+      }),
+      prisma.productPackagingProfile.count({
+        where: { confidenceScore: { gte: 0.4, lt: 0.7 } },
+      }),
+      prisma.productPackagingProfile.count({
+        where: { confidenceScore: { gte: 0.7 } },
+      }),
+    ]);
+
     const recentImportBatches = await prisma.importBatch.findMany({
       orderBy: { importedAt: "desc" },
-      take: 5,
+      take: 8,
+    });
+
+    // Status counts for distribution chart
+    const statusImportedCount = await prisma.productPackagingProfile.count({
+      where: { status: "IMPORTED" },
     });
 
     return NextResponse.json({
@@ -50,6 +76,19 @@ export async function GET() {
       productsMissingMinData,
       productsWithoutSampling: totalProducts - productsWithSampling,
       recentImportBatches,
+      // Charts data
+      statusDistribution: {
+        IMPORTED: statusImportedCount,
+        ESTIMATED: productsWithEstimateOnly,
+        SAMPLED: statusSampled,
+        REVIEWED: statusReviewed,
+      },
+      avgConfidence: confidenceAgg._avg.confidenceScore ?? 0,
+      confidenceDistribution: {
+        low: confLow,
+        medium: confMed,
+        high: confHigh,
+      },
     });
   } catch (error) {
     console.error("Dashboard error:", error);
