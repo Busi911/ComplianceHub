@@ -76,6 +76,8 @@ model SamplingRecord {
   netWeightAtSamplingG  Float?
   grossWeightAtSamplingG Float?
   notes                 String?
+  isOutlier             Boolean  @default(false)
+  outlierReason         String?
   createdAt             DateTime @default(now())
 
   product               Product  @relation(fields: [productId], references: [id], onDelete: Cascade)

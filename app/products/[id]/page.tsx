@@ -18,6 +18,8 @@ interface SamplingRecord {
   netWeightAtSamplingG: number | null;
   grossWeightAtSamplingG: number | null;
   notes: string | null;
+  isOutlier: boolean;
+  outlierReason: string | null;
 }
 
 interface EstimateHistory {
@@ -564,6 +566,11 @@ export default function ProductDetailPage() {
           <div className="px-5 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-900">Stichproben ({product.samplingRecords.length})</h2>
           </div>
+          {product.samplingRecords.some((r) => r.isOutlier) && (
+            <div className="mx-5 mb-0 mt-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">
+              Ausreißer-Messungen werden in der Schätzung <strong>nicht berücksichtigt</strong> (IQR-Methode + Z-Score).
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -572,21 +579,42 @@ export default function ProductDetailPage() {
                   <th className="px-4 py-2 font-medium text-gray-600">Von</th>
                   <th className="px-4 py-2 font-medium text-gray-600 text-right">Kunststoff</th>
                   <th className="px-4 py-2 font-medium text-gray-600 text-right">Papier</th>
-                  <th className="px-4 py-2 font-medium text-gray-600 text-right">Gesamt</th>
-                  <th className="px-4 py-2 font-medium text-gray-600 text-right">Bruttogewicht</th>
+                  <th className="px-4 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Gesamt</th>
+                  <th className="px-4 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Bruttogewicht</th>
                   <th className="px-4 py-2 font-medium text-gray-600">Notizen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {product.samplingRecords.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className={r.isOutlier ? "bg-orange-50" : ""}>
                     <td className="px-4 py-2 text-xs font-mono">{fmtDate(r.sampledAt)}</td>
                     <td className="px-4 py-2 text-gray-600">{r.sampledBy ?? "—"}</td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">{fmt(r.measuredPlasticG)}</td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">{fmt(r.measuredPaperG)}</td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">{fmt(r.measuredTotalPackagingG)}</td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">{fmt(r.grossWeightAtSamplingG)}</td>
-                    <td className="px-4 py-2 text-xs text-gray-500">{r.notes ?? "—"}</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs">
+                      <span className={r.isOutlier ? "line-through text-orange-400" : ""}>
+                        {fmt(r.measuredPlasticG)}
+                      </span>
+                      {r.isOutlier && (
+                        <span
+                          className="ml-1 text-orange-600 cursor-help"
+                          title={`Ausreißer: ${r.outlierReason ?? "statistisch auffällig"}`}
+                        >
+                          ⚠
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-xs">
+                      <span className={r.isOutlier ? "line-through text-orange-400" : ""}>
+                        {fmt(r.measuredPaperG)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-xs hidden md:table-cell">{fmt(r.measuredTotalPackagingG)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs hidden md:table-cell">{fmt(r.grossWeightAtSamplingG)}</td>
+                    <td className="px-4 py-2 text-xs text-gray-500">
+                      {r.isOutlier && r.outlierReason && (
+                        <span className="block text-orange-500 mb-0.5">{r.outlierReason}</span>
+                      )}
+                      {r.notes ?? "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

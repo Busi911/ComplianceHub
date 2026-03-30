@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { PackagingStatus } from "@prisma/client";
+import { mean, pearsonR, linearRegression, detectOutliers } from "./stats";
 
 export interface EstimationResult {
   plasticG: number | null;
@@ -12,21 +13,26 @@ export interface EstimationResult {
 /**
  * Main estimation function for a product.
  * Priority:
- * 1. Own SamplingRecords (highest confidence)
- * 2. Similar products by category/subcategory/brand/manufacturer/weight/price/volume
- * 3. Category average
+ * 1. Own SamplingRecords (outliers excluded) — highest confidence
+ * 2. Similar products by category/subcategory/brand/weight/price/volume
+ * 3. Linear regression: grossWeightG → plasticG in category (r² ≥ 0.4, n ≥ 5)
+ * 4. Category average — lowest confidence
  */
 export async function estimatePackaging(
   productId: string
 ): Promise<EstimationResult | null> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
-    include: { samplingRecords: true },
+    include: {
+      samplingRecords: {
+        where: { isOutlier: false }, // exclude flagged outliers
+      },
+    },
   });
 
   if (!product) return null;
 
-  // 1. Own sampling records
+  // ── Tier 1: Own sampling records (outliers already excluded by query) ──────
   if (product.samplingRecords.length > 0) {
     const plasticValues = product.samplingRecords
       .map((r) => r.measuredPlasticG)
@@ -35,16 +41,10 @@ export async function estimatePackaging(
       .map((r) => r.measuredPaperG)
       .filter((v): v is number => v !== null);
 
-    const plasticG =
-      plasticValues.length > 0
-        ? plasticValues.reduce((a, b) => a + b, 0) / plasticValues.length
-        : null;
-    const paperG =
-      paperValues.length > 0
-        ? paperValues.reduce((a, b) => a + b, 0) / paperValues.length
-        : null;
-
+    const plasticG = plasticValues.length > 0 ? mean(plasticValues) : null;
+    const paperG = paperValues.length > 0 ? mean(paperValues) : null;
     const confidence = Math.min(0.5 + product.samplingRecords.length * 0.15, 0.95);
+
     return {
       plasticG,
       paperG,
@@ -54,7 +54,7 @@ export async function estimatePackaging(
     };
   }
 
-  // 2. Similar products with sampling data
+  // ── Tier 2: Similar products with sampling data ───────────────────────────
   const similarProducts = await findSimilarProductsWithSampling(product);
 
   if (similarProducts.length > 0) {
@@ -65,16 +65,10 @@ export async function estimatePackaging(
       .flatMap((p) => p.samplingRecords.map((r) => r.measuredPaperG))
       .filter((v): v is number => v !== null);
 
-    const plasticG =
-      plasticValues.length > 0
-        ? plasticValues.reduce((a, b) => a + b, 0) / plasticValues.length
-        : null;
-    const paperG =
-      paperValues.length > 0
-        ? paperValues.reduce((a, b) => a + b, 0) / paperValues.length
-        : null;
-
+    const plasticG = plasticValues.length > 0 ? mean(plasticValues) : null;
+    const paperG = paperValues.length > 0 ? mean(paperValues) : null;
     const baseConfidence = computeSimilarityConfidence(product, similarProducts);
+
     return {
       plasticG,
       paperG,
@@ -84,15 +78,30 @@ export async function estimatePackaging(
     };
   }
 
-  // 3. Category-level average from all sampled products
+  // ── Tier 3: Regression model (grossWeightG → plasticG) within category ────
+  if (product.category && product.grossWeightG) {
+    const regressionResult = await tryRegressionEstimate(
+      product.category,
+      productId,
+      product.grossWeightG
+    );
+    if (regressionResult) return regressionResult;
+  }
+
+  // ── Tier 4: Category-level average ────────────────────────────────────────
   if (product.category) {
     const categoryProducts = await prisma.product.findMany({
       where: {
         category: product.category,
         id: { not: productId },
-        samplingRecords: { some: {} },
+        samplingRecords: { some: { isOutlier: false } },
       },
-      include: { samplingRecords: true },
+      include: {
+        samplingRecords: {
+          where: { isOutlier: false },
+          select: { measuredPlasticG: true, measuredPaperG: true },
+        },
+      },
       take: 50,
     });
 
@@ -104,18 +113,9 @@ export async function estimatePackaging(
         .flatMap((p) => p.samplingRecords.map((r) => r.measuredPaperG))
         .filter((v): v is number => v !== null);
 
-      const plasticG =
-        plasticValues.length > 0
-          ? plasticValues.reduce((a, b) => a + b, 0) / plasticValues.length
-          : null;
-      const paperG =
-        paperValues.length > 0
-          ? paperValues.reduce((a, b) => a + b, 0) / paperValues.length
-          : null;
-
       return {
-        plasticG,
-        paperG,
+        plasticG: plasticValues.length > 0 ? mean(plasticValues) : null,
+        paperG: paperValues.length > 0 ? mean(paperValues) : null,
         confidenceScore: 0.2,
         method: `category_avg_n${categoryProducts.length}`,
         basedOnProductIds: categoryProducts.map((p) => p.id),
@@ -124,6 +124,79 @@ export async function estimatePackaging(
   }
 
   return null;
+}
+
+/**
+ * Tier 3 helper: linear regression on category data.
+ * Requires ≥5 data points and r² ≥ 0.4.
+ * Confidence = 0.20 + r2 × 0.50  (range: 0.40–0.70)
+ */
+async function tryRegressionEstimate(
+  category: string,
+  excludeId: string,
+  grossWeightG: number
+): Promise<EstimationResult | null> {
+  const catProducts = await prisma.product.findMany({
+    where: {
+      category,
+      id: { not: excludeId },
+      grossWeightG: { not: null },
+      samplingRecords: { some: { isOutlier: false } },
+    },
+    select: {
+      id: true,
+      grossWeightG: true,
+      samplingRecords: {
+        where: { isOutlier: false },
+        select: { measuredPlasticG: true, measuredPaperG: true },
+      },
+    },
+    take: 100,
+  });
+
+  const xs: number[] = [];
+  const plasticYs: number[] = [];
+  const paperYs: number[] = [];
+
+  for (const p of catProducts) {
+    if (!p.grossWeightG) continue;
+    const pVals = p.samplingRecords
+      .map((r) => r.measuredPlasticG)
+      .filter((v): v is number => v !== null);
+    if (pVals.length === 0) continue;
+    xs.push(p.grossWeightG);
+    plasticYs.push(mean(pVals));
+    const paVals = p.samplingRecords
+      .map((r) => r.measuredPaperG)
+      .filter((v): v is number => v !== null);
+    paperYs.push(paVals.length > 0 ? mean(paVals) : 0);
+  }
+
+  if (xs.length < 5) return null;
+
+  const plasticModel = linearRegression(xs, plasticYs);
+  if (!plasticModel || plasticModel.r2 < 0.4) return null;
+
+  const predictedPlastic = plasticModel.a + plasticModel.b * grossWeightG;
+  if (predictedPlastic < 0) return null;
+
+  let predictedPaper: number | null = null;
+  if (paperYs.length === xs.length) {
+    const paperModel = linearRegression(xs, paperYs);
+    if (paperModel && paperModel.r2 >= 0.3) {
+      predictedPaper = Math.max(0, paperModel.a + paperModel.b * grossWeightG);
+    }
+  }
+
+  const confidence = Math.round((0.2 + plasticModel.r2 * 0.5) * 100) / 100;
+
+  return {
+    plasticG: Math.round(predictedPlastic * 10) / 10,
+    paperG: predictedPaper !== null ? Math.round(predictedPaper * 10) / 10 : null,
+    confidenceScore: Math.min(confidence, 0.70),
+    method: `regression_gross_weight_r2=${Math.round(plasticModel.r2 * 100)}_n${xs.length}`,
+    basedOnProductIds: catProducts.map((p) => p.id),
+  };
 }
 
 interface ProductWithSampling {
@@ -149,7 +222,7 @@ async function findSimilarProductsWithSampling(
 ): Promise<ProductWithSampling[]> {
   const where: Record<string, unknown> = {
     id: { not: product.id },
-    samplingRecords: { some: {} },
+    samplingRecords: { some: { isOutlier: false } },
   };
 
   const orConditions: Record<string, unknown>[] = [];
@@ -167,7 +240,10 @@ async function findSimilarProductsWithSampling(
   if (product.category && product.grossWeightG)
     orConditions.push({
       category: product.category,
-      grossWeightG: { gte: product.grossWeightG * 0.75, lte: product.grossWeightG * 1.25 },
+      grossWeightG: {
+        gte: product.grossWeightG * 0.75,
+        lte: product.grossWeightG * 1.25,
+      },
     });
   if (orConditions.length === 0 && product.category)
     orConditions.push({ category: product.category });
@@ -177,11 +253,19 @@ async function findSimilarProductsWithSampling(
 
   const results = await prisma.product.findMany({
     where,
-    include: { samplingRecords: { select: { measuredPlasticG: true, measuredPaperG: true } } },
+    include: {
+      samplingRecords: {
+        where: { isOutlier: false },
+        select: { measuredPlasticG: true, measuredPaperG: true },
+      },
+    },
     take: 20,
   });
 
-  return results as unknown as ProductWithSampling[];
+  // Drop any candidate whose records all turned out outliers (empty after filter)
+  return results.filter(
+    (p) => p.samplingRecords.length > 0
+  ) as unknown as ProductWithSampling[];
 }
 
 function computeSimilarityConfidence(
@@ -205,7 +289,8 @@ function computeSimilarityConfidence(
       else if (d < 0.3) score += 1;
     }
     if (product.grossWeightG && similar.grossWeightG) {
-      const d = Math.abs(product.grossWeightG - similar.grossWeightG) / product.grossWeightG;
+      const d =
+        Math.abs(product.grossWeightG - similar.grossWeightG) / product.grossWeightG;
       if (d < 0.1) score += 2;
       else if (d < 0.25) score += 1;
     }
@@ -252,9 +337,14 @@ function computeSimilarityConfidence(
 
 /**
  * Called after a new SamplingRecord is created.
- * Updates the ProductPackagingProfile, tracks estimation accuracy, and logs the change.
+ * 1. Re-runs outlier detection across ALL of the product's own records.
+ * 2. Updates the ProductPackagingProfile (with accuracy tracking on ESTIMATED→SAMPLED).
+ * 3. Logs the change to ProductEstimateHistory.
  */
 export async function updateProfileAfterSampling(productId: string): Promise<void> {
+  // ── Step 1: Re-evaluate outliers on all own records ──────────────────────
+  await redetectOutliersForProduct(productId);
+
   const existing = await prisma.productPackagingProfile.findUnique({
     where: { productId },
   });
@@ -266,7 +356,7 @@ export async function updateProfileAfterSampling(productId: string): Promise<voi
   const oldPaperG = existing?.currentPaperG ?? null;
   const isMeasured = result.method.startsWith("own_sampling");
 
-  // B: Accuracy tracking — compute estimation error when transitioning ESTIMATED → SAMPLED
+  // ── Step 2: Accuracy tracking (ESTIMATED → SAMPLED transition) ───────────
   let estimationErrorPct: number | null = null;
   if (
     isMeasured &&
@@ -275,7 +365,6 @@ export async function updateProfileAfterSampling(productId: string): Promise<voi
     result.plasticG != null &&
     result.plasticG > 0
   ) {
-    // Signed % error: positive = we overestimated, negative = underestimated
     estimationErrorPct =
       Math.round(
         ((existing.estimatedPlasticG - result.plasticG) / result.plasticG) * 1000
@@ -322,8 +411,8 @@ export async function updateProfileAfterSampling(productId: string): Promise<voi
         reason: isMeasured
           ? estimationErrorPct !== null
             ? `Erste Wiegung — Schätzfehler war ${estimationErrorPct > 0 ? "+" : ""}${estimationErrorPct}%`
-            : "New sampling record added"
-          : "Re-estimated from similar products",
+            : "Neue Stichprobe hinzugefügt"
+          : "Re-Schätzung aus ähnlichen Produkten",
         method: result.method,
       },
     });
@@ -331,11 +420,39 @@ export async function updateProfileAfterSampling(productId: string): Promise<voi
 }
 
 /**
+ * Re-runs IQR + Z-Score outlier detection across all SamplingRecords
+ * (measuredPlasticG) for a product and persists the flags.
+ * Only updates records whose flag actually changed to avoid noisy writes.
+ */
+export async function redetectOutliersForProduct(productId: string): Promise<void> {
+  const records = await prisma.samplingRecord.findMany({
+    where: { productId },
+    select: { id: true, measuredPlasticG: true, isOutlier: true },
+    orderBy: { sampledAt: "asc" },
+  });
+
+  const withValues = records.filter((r) => r.measuredPlasticG !== null);
+  if (withValues.length < 3) return; // not enough data for statistics
+
+  const values = withValues.map((r) => r.measuredPlasticG as number);
+  const results = detectOutliers(values);
+
+  for (let i = 0; i < withValues.length; i++) {
+    const { isOutlier, reason } = results[i];
+    if (isOutlier !== withValues[i].isOutlier) {
+      await prisma.samplingRecord.update({
+        where: { id: withValues[i].id },
+        data: { isOutlier, outlierReason: reason },
+      });
+    }
+  }
+}
+
+/**
  * A: Re-Estimation Cascade
  * After a new weighing is recorded, re-estimate all ESTIMATED products in the same
  * category so they immediately benefit from the new reference data.
- * Capped at 40 products to keep response time reasonable.
- * Returns the number of products whose estimates actually changed.
+ * Capped at 40 products. Returns the count of products actually updated.
  */
 export async function cascadeReestimateCategory(
   category: string,
@@ -361,7 +478,6 @@ export async function cascadeReestimateCategory(
     const old = p.packagingProfile;
     if (!old) continue;
 
-    // Only update if confidence improved or values shifted by more than 2%
     const plasticShift =
       old.currentPlasticG && result.plasticG
         ? Math.abs(old.currentPlasticG - result.plasticG) / old.currentPlasticG
