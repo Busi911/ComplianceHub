@@ -64,6 +64,7 @@ interface Product {
     measuredPaperG: number | null;
     confidenceScore: number | null;
     estimationMethod: string | null;
+    estimationErrorPct: number | null;
     notes: string | null;
   } | null;
   samplingRecords: SamplingRecord[];
@@ -487,6 +488,28 @@ export default function ProductDetailPage() {
                 <Field label="Gemessen Kunststoff" value={fmt(product.packagingProfile.measuredPlasticG)} mono />
                 <Field label="Gemessen Papier" value={fmt(product.packagingProfile.measuredPaperG)} mono />
               </dl>
+            )}
+            {product.packagingProfile.estimationErrorPct !== null && (
+              <div className={`mt-2 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
+                Math.abs(product.packagingProfile.estimationErrorPct) < 10
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : Math.abs(product.packagingProfile.estimationErrorPct) < 25
+                    ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+              }`}>
+                <span className="text-base">
+                  {Math.abs(product.packagingProfile.estimationErrorPct) < 10 ? "🎯" :
+                   Math.abs(product.packagingProfile.estimationErrorPct) < 25 ? "⚠" : "❌"}
+                </span>
+                <span>
+                  <strong>Schätzfehler (erste Messung):</strong>{" "}
+                  {product.packagingProfile.estimationErrorPct > 0 ? "+" : ""}
+                  {product.packagingProfile.estimationErrorPct}%
+                  {" "}({product.packagingProfile.estimationErrorPct > 0
+                    ? "Schätzung war zu hoch"
+                    : "Schätzung war zu niedrig"})
+                </span>
+              </div>
             )}
           </div>
         ) : (

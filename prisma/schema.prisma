@@ -57,6 +57,7 @@ model ProductPackagingProfile {
   currentPaperG     Float?
   confidenceScore   Float?   // 0.0 - 1.0
   estimationMethod  String?
+  estimationErrorPct Float?  // % error when first measured vs prior estimate (+ = overestimated)
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

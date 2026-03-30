@@ -13,7 +13,7 @@ export interface EstimationResult {
  * Main estimation function for a product.
  * Priority:
  * 1. Own SamplingRecords (highest confidence)
- * 2. Similar products by category/subcategory/brand/manufacturer/weight/price
+ * 2. Similar products by category/subcategory/brand/manufacturer/weight/price/volume
  * 3. Category average
  */
 export async function estimatePackaging(
@@ -44,9 +44,7 @@ export async function estimatePackaging(
         ? paperValues.reduce((a, b) => a + b, 0) / paperValues.length
         : null;
 
-    // Confidence increases with more samples, caps at 0.95
     const confidence = Math.min(0.5 + product.samplingRecords.length * 0.15, 0.95);
-
     return {
       plasticG,
       paperG,
@@ -76,9 +74,7 @@ export async function estimatePackaging(
         ? paperValues.reduce((a, b) => a + b, 0) / paperValues.length
         : null;
 
-    // Confidence based on similarity and sample count
     const baseConfidence = computeSimilarityConfidence(product, similarProducts);
-
     return {
       plasticG,
       paperG,
@@ -156,64 +152,32 @@ async function findSimilarProductsWithSampling(
     samplingRecords: { some: {} },
   };
 
-  // Build OR conditions for similarity
   const orConditions: Record<string, unknown>[] = [];
 
-  // Same subcategory (most specific)
-  if (product.subcategory) {
-    orConditions.push({ subcategory: product.subcategory });
-  }
-
-  // Same brand + category
-  if (product.brand && product.category) {
+  if (product.subcategory) orConditions.push({ subcategory: product.subcategory });
+  if (product.brand && product.category)
     orConditions.push({ brand: product.brand, category: product.category });
-  }
-
-  // Same manufacturer + category
-  if (product.manufacturer && product.category) {
-    orConditions.push({
-      manufacturer: product.manufacturer,
-      category: product.category,
-    });
-  }
-
-  // Same category + similar price range (±30%)
-  if (product.category && product.ekPrice) {
+  if (product.manufacturer && product.category)
+    orConditions.push({ manufacturer: product.manufacturer, category: product.category });
+  if (product.category && product.ekPrice)
     orConditions.push({
       category: product.category,
-      ekPrice: {
-        gte: product.ekPrice * 0.7,
-        lte: product.ekPrice * 1.3,
-      },
+      ekPrice: { gte: product.ekPrice * 0.7, lte: product.ekPrice * 1.3 },
     });
-  }
-
-  // Same category + similar gross weight (±25%)
-  if (product.category && product.grossWeightG) {
+  if (product.category && product.grossWeightG)
     orConditions.push({
       category: product.category,
-      grossWeightG: {
-        gte: product.grossWeightG * 0.75,
-        lte: product.grossWeightG * 1.25,
-      },
+      grossWeightG: { gte: product.grossWeightG * 0.75, lte: product.grossWeightG * 1.25 },
     });
-  }
-
-  if (orConditions.length === 0 && product.category) {
+  if (orConditions.length === 0 && product.category)
     orConditions.push({ category: product.category });
-  }
-
   if (orConditions.length === 0) return [];
 
   where.OR = orConditions;
 
   const results = await prisma.product.findMany({
     where,
-    include: {
-      samplingRecords: {
-        select: { measuredPlasticG: true, measuredPaperG: true },
-      },
-    },
+    include: { samplingRecords: { select: { measuredPlasticG: true, measuredPaperG: true } } },
     take: 20,
   });
 
@@ -226,83 +190,71 @@ function computeSimilarityConfidence(
 ): number {
   if (similarProducts.length === 0) return 0.1;
 
-  // Score the best match
   let maxScore = 0;
-
   for (const similar of similarProducts) {
     let score = 0;
 
-    if (product.subcategory && similar.subcategory === product.subcategory)
-      score += 3;
+    if (product.subcategory && similar.subcategory === product.subcategory) score += 3;
     if (product.category && similar.category === product.category) score += 2;
     if (product.brand && similar.brand === product.brand) score += 2;
-    if (
-      product.manufacturer &&
-      similar.manufacturer === product.manufacturer
-    )
-      score += 1;
+    if (product.manufacturer && similar.manufacturer === product.manufacturer) score += 1;
 
-    // Price similarity
     if (product.ekPrice && similar.ekPrice) {
-      const priceDiff =
-        Math.abs(product.ekPrice - similar.ekPrice) / product.ekPrice;
-      if (priceDiff < 0.1) score += 2;
-      else if (priceDiff < 0.3) score += 1;
+      const d = Math.abs(product.ekPrice - similar.ekPrice) / product.ekPrice;
+      if (d < 0.1) score += 2;
+      else if (d < 0.3) score += 1;
     }
-
-    // Gross weight similarity
     if (product.grossWeightG && similar.grossWeightG) {
-      const weightDiff =
-        Math.abs(product.grossWeightG - similar.grossWeightG) /
-        product.grossWeightG;
-      if (weightDiff < 0.1) score += 2;
-      else if (weightDiff < 0.25) score += 1;
+      const d = Math.abs(product.grossWeightG - similar.grossWeightG) / product.grossWeightG;
+      if (d < 0.1) score += 2;
+      else if (d < 0.25) score += 1;
     }
 
-    // Volume similarity (packaging volume = L×B×H) — better proxy for packaging material amount
-    const pVol = product.grossLengthMm && product.grossWidthMm && product.grossHeightMm
-      ? product.grossLengthMm * product.grossWidthMm * product.grossHeightMm
-      : null;
-    const sVol = similar.grossLengthMm && similar.grossWidthMm && similar.grossHeightMm
-      ? similar.grossLengthMm * similar.grossWidthMm * similar.grossHeightMm
-      : null;
+    const pVol =
+      product.grossLengthMm && product.grossWidthMm && product.grossHeightMm
+        ? product.grossLengthMm * product.grossWidthMm * product.grossHeightMm
+        : null;
+    const sVol =
+      similar.grossLengthMm && similar.grossWidthMm && similar.grossHeightMm
+        ? similar.grossLengthMm * similar.grossWidthMm * similar.grossHeightMm
+        : null;
     if (pVol && sVol) {
-      const volDiff = Math.abs(pVol - sVol) / pVol;
-      if (volDiff < 0.1) score += 3;
-      else if (volDiff < 0.25) score += 2;
-      else if (volDiff < 0.5) score += 1;
+      const d = Math.abs(pVol - sVol) / pVol;
+      if (d < 0.1) score += 3;
+      else if (d < 0.25) score += 2;
+      else if (d < 0.5) score += 1;
     }
 
-    // Packaging ratio: (grossWeight - netWeight) / grossVolume — similar ratio = similar packaging density
-    const pPackW = product.grossWeightG && product.netWeightG
-      ? product.grossWeightG - product.netWeightG : null;
-    const sPackW = similar.grossWeightG && similar.netWeightG
-      ? similar.grossWeightG - similar.netWeightG : null;
+    const pPackW =
+      product.grossWeightG && product.netWeightG
+        ? product.grossWeightG - product.netWeightG
+        : null;
+    const sPackW =
+      similar.grossWeightG && similar.netWeightG
+        ? similar.grossWeightG - similar.netWeightG
+        : null;
     if (pPackW && sPackW && pVol && sVol) {
       const pRatio = pPackW / pVol;
       const sRatio = sPackW / sVol;
       if (pRatio > 0 && sRatio > 0) {
-        const ratioDiff = Math.abs(pRatio - sRatio) / pRatio;
-        if (ratioDiff < 0.15) score += 2;
-        else if (ratioDiff < 0.35) score += 1;
+        const d = Math.abs(pRatio - sRatio) / pRatio;
+        if (d < 0.15) score += 2;
+        else if (d < 0.35) score += 1;
       }
     }
 
     maxScore = Math.max(maxScore, score);
   }
 
-  // Max possible score is ~20 (with volume+ratio), map to 0.2–0.78
   const normalized = Math.min(maxScore / 20, 1);
   return Math.round((0.2 + normalized * 0.58) * 100) / 100;
 }
 
 /**
  * Called after a new SamplingRecord is created.
- * Updates the ProductPackagingProfile and logs the change.
+ * Updates the ProductPackagingProfile, tracks estimation accuracy, and logs the change.
  */
-export async function updateProfileAfterSampling(
-  productId: string
-): Promise<void> {
+export async function updateProfileAfterSampling(productId: string): Promise<void> {
   const existing = await prisma.productPackagingProfile.findUnique({
     where: { productId },
   });
@@ -312,9 +264,23 @@ export async function updateProfileAfterSampling(
 
   const oldPlasticG = existing?.currentPlasticG ?? null;
   const oldPaperG = existing?.currentPaperG ?? null;
-
-  // Determine if this is from real sampling (method starts with "own_sampling")
   const isMeasured = result.method.startsWith("own_sampling");
+
+  // B: Accuracy tracking — compute estimation error when transitioning ESTIMATED → SAMPLED
+  let estimationErrorPct: number | null = null;
+  if (
+    isMeasured &&
+    existing?.status === PackagingStatus.ESTIMATED &&
+    existing.estimatedPlasticG != null &&
+    result.plasticG != null &&
+    result.plasticG > 0
+  ) {
+    // Signed % error: positive = we overestimated, negative = underestimated
+    estimationErrorPct =
+      Math.round(
+        ((existing.estimatedPlasticG - result.plasticG) / result.plasticG) * 1000
+      ) / 10;
+  }
 
   await prisma.productPackagingProfile.upsert({
     where: { productId },
@@ -329,6 +295,7 @@ export async function updateProfileAfterSampling(
       estimatedPaperG: isMeasured ? undefined : result.paperG,
       confidenceScore: result.confidenceScore,
       estimationMethod: result.method,
+      estimationErrorPct: estimationErrorPct ?? undefined,
     },
     update: {
       status: isMeasured ? PackagingStatus.SAMPLED : PackagingStatus.ESTIMATED,
@@ -340,14 +307,11 @@ export async function updateProfileAfterSampling(
       estimatedPaperG: isMeasured ? undefined : result.paperG,
       confidenceScore: result.confidenceScore,
       estimationMethod: result.method,
+      ...(estimationErrorPct !== null ? { estimationErrorPct } : {}),
     },
   });
 
-  // Log the change if values actually changed
-  if (
-    oldPlasticG !== result.plasticG ||
-    oldPaperG !== result.paperG
-  ) {
+  if (oldPlasticG !== result.plasticG || oldPaperG !== result.paperG) {
     await prisma.productEstimateHistory.create({
       data: {
         productId,
@@ -355,9 +319,74 @@ export async function updateProfileAfterSampling(
         oldPaperG,
         newPlasticG: result.plasticG,
         newPaperG: result.paperG,
-        reason: isMeasured ? "New sampling record added" : "Re-estimated from similar products",
+        reason: isMeasured
+          ? estimationErrorPct !== null
+            ? `Erste Wiegung — Schätzfehler war ${estimationErrorPct > 0 ? "+" : ""}${estimationErrorPct}%`
+            : "New sampling record added"
+          : "Re-estimated from similar products",
         method: result.method,
       },
     });
   }
+}
+
+/**
+ * A: Re-Estimation Cascade
+ * After a new weighing is recorded, re-estimate all ESTIMATED products in the same
+ * category so they immediately benefit from the new reference data.
+ * Capped at 40 products to keep response time reasonable.
+ * Returns the number of products whose estimates actually changed.
+ */
+export async function cascadeReestimateCategory(
+  category: string,
+  excludeProductId: string
+): Promise<number> {
+  const toReestimate = await prisma.product.findMany({
+    where: {
+      category,
+      id: { not: excludeProductId },
+      samplingRecords: { none: {} },
+      packagingProfile: { status: PackagingStatus.ESTIMATED },
+    },
+    include: { packagingProfile: true },
+    take: 40,
+  });
+
+  let updatedCount = 0;
+
+  for (const p of toReestimate) {
+    const result = await estimatePackaging(p.id);
+    if (!result) continue;
+
+    const old = p.packagingProfile;
+    if (!old) continue;
+
+    // Only update if confidence improved or values shifted by more than 2%
+    const plasticShift =
+      old.currentPlasticG && result.plasticG
+        ? Math.abs(old.currentPlasticG - result.plasticG) / old.currentPlasticG
+        : old.currentPlasticG !== result.plasticG
+          ? 1
+          : 0;
+
+    const confidenceImproved =
+      (result.confidenceScore ?? 0) > (old.confidenceScore ?? 0) + 0.01;
+
+    if (plasticShift > 0.02 || confidenceImproved) {
+      await prisma.productPackagingProfile.update({
+        where: { productId: p.id },
+        data: {
+          currentPlasticG: result.plasticG,
+          currentPaperG: result.paperG,
+          estimatedPlasticG: result.plasticG,
+          estimatedPaperG: result.paperG,
+          confidenceScore: result.confidenceScore,
+          estimationMethod: result.method,
+        },
+      });
+      updatedCount++;
+    }
+  }
+
+  return updatedCount;
 }

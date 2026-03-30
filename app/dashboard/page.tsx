@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import type { GamificationData } from "@/app/api/gamification/route";
 
 interface DashboardData {
   totalProducts: number;
@@ -71,13 +72,17 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gamification, setGamification] = useState<GamificationData | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then((r) => r.json())
-      .then((d) => {
+    Promise.all([
+      fetch("/api/dashboard").then((r) => r.json()),
+      fetch("/api/gamification").then((r) => r.json()),
+    ])
+      .then(([d, g]) => {
         if (d.error) throw new Error(d.error);
         setData(d);
+        if (!g.error) setGamification(g);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -365,6 +370,119 @@ export default function DashboardPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Gamification section */}
+      {gamification && (
+        <div className="space-y-4">
+          {/* Streak + stats row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-orange-600">
+                {gamification.streak > 0 ? `🔥 ${gamification.streak}` : "—"}
+              </div>
+              <div className="text-xs text-orange-700 mt-1 font-medium">Tage in Folge</div>
+              <div className="text-xs text-orange-400 mt-0.5">Aktuelle Serie</div>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-green-700">{gamification.todayCount}</div>
+              <div className="text-xs text-green-700 mt-1 font-medium">Heute gewogen</div>
+              <div className="text-xs text-green-400 mt-0.5">{gamification.totalSamplingRecords} gesamt</div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-blue-700">{gamification.totalSampledProducts}</div>
+              <div className="text-xs text-blue-700 mt-1 font-medium">Produkte gemessen</div>
+              <div className="text-xs text-blue-400 mt-0.5">mit eigener Stichprobe</div>
+            </div>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-purple-700">
+                {gamification.avgEstimationErrorAbs !== null
+                  ? `${gamification.avgEstimationErrorAbs}%`
+                  : "—"}
+              </div>
+              <div className="text-xs text-purple-700 mt-1 font-medium">Ø Schätzfehler</div>
+              <div className="text-xs text-purple-400 mt-0.5">bei Erstmessung</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Weekly activity bars */}
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
+              <h2 className="font-semibold text-gray-900 mb-3">Aktivität letzte 7 Tage</h2>
+              <div className="flex items-end gap-1.5 h-20">
+                {gamification.weeklyActivity.map(({ date, count }) => {
+                  const maxCount = Math.max(...gamification.weeklyActivity.map((d) => d.count), 1);
+                  const pct = Math.round((count / maxCount) * 100);
+                  const isToday = date === new Date().toISOString().slice(0, 10);
+                  return (
+                    <div key={date} className="flex-1 flex flex-col items-center gap-1" title={`${date}: ${count} Wiegungen`}>
+                      <div className="w-full flex items-end" style={{ height: 64 }}>
+                        <div
+                          className={`w-full rounded-t transition-all ${isToday ? "bg-green-500" : count > 0 ? "bg-blue-400" : "bg-gray-100"}`}
+                          style={{ height: `${Math.max(pct, count > 0 ? 8 : 4)}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {new Date(date).toLocaleDateString("de-DE", { weekday: "short" }).slice(0, 2)}
+                      </div>
+                      {count > 0 && (
+                        <div className="text-xs font-medium text-gray-600">{count}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Badges */}
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
+              <h2 className="font-semibold text-gray-900 mb-3">Abzeichen</h2>
+              <div className="grid grid-cols-4 gap-2">
+                {gamification.badges.map((badge) => (
+                  <div
+                    key={badge.id}
+                    title={badge.description}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-lg text-center transition-all ${
+                      badge.earned
+                        ? "bg-yellow-50 border border-yellow-200"
+                        : "bg-gray-50 border border-gray-100 opacity-40 grayscale"
+                    }`}
+                  >
+                    <span className="text-2xl">{badge.icon}</span>
+                    <span className="text-xs text-gray-600 leading-tight">{badge.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Category progress */}
+          {gamification.categoryProgress.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg p-5">
+              <h2 className="font-semibold text-gray-900 mb-3">Fortschritt nach Kategorie</h2>
+              <div className="space-y-2">
+                {gamification.categoryProgress.map(({ category, total, sampled, pct }) => (
+                  <div key={category} className="flex items-center gap-3">
+                    <div className="text-xs text-gray-600 w-32 flex-shrink-0 truncate" title={category}>
+                      {category}
+                    </div>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-3 rounded-full transition-all ${
+                          pct === 100 ? "bg-green-500" : pct > 0 ? "bg-blue-400" : "bg-gray-200"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                      {sampled}/{total} ({pct}%)
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
