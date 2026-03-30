@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", exact: false },
   { href: "/products", label: "Produkte", exact: false },
+  { href: "/brands", label: "Marken", exact: false },
   { href: "/sampling", label: "Stichproben", exact: true },
   { href: "/sampling/session", label: "Wiegesession", exact: false },
   { href: "/import", label: "Import", exact: false },

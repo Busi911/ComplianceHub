@@ -43,7 +43,7 @@ export async function estimatePackaging(
 
     const plasticG = plasticValues.length > 0 ? mean(plasticValues) : null;
     const paperG = paperValues.length > 0 ? mean(paperValues) : null;
-    const confidence = Math.min(0.5 + product.samplingRecords.length * 0.15, 0.95);
+    const confidence = Math.min(0.70 + product.samplingRecords.length * 0.10, 0.95);
 
     return {
       plasticG,
