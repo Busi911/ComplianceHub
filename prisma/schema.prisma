@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Product {
+  id               String   @id @default(cuid())
+  sku              String   @unique
+  manufacturer     String?
+  brand            String?
+  productName      String
+  category         String?
+  subcategory      String?
+  ekPrice          Float?
+  netWeightG       Float?
+  grossWeightG     Float?
+  netLengthMm      Float?
+  netWidthMm       Float?
+  netHeightMm      Float?
+  grossLengthMm    Float?
+  grossWidthMm     Float?
+  grossHeightMm    Float?
+  source           String?
+  importBatchId    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  importBatch      ImportBatch?             @relation(fields: [importBatchId], references: [id])
+  packagingProfile ProductPackagingProfile?
+  samplingRecords  SamplingRecord[]
+  estimateHistory  ProductEstimateHistory[]
+  auditLogs        AuditLog[]               @relation("ProductAuditLogs")
+
+  @@index([category])
+  @@index([brand])
+  @@index([manufacturer])
+  @@index([importBatchId])
+}
+
+model ProductPackagingProfile {
+  id               String   @id @default(cuid())
+  productId        String   @unique
+  status           PackagingStatus @default(IMPORTED)
+  estimatedPlasticG Float?
+  estimatedPaperG   Float?
+  measuredPlasticG  Float?
+  measuredPaperG    Float?
+  currentPlasticG   Float?
+  currentPaperG     Float?
+  confidenceScore   Float?   // 0.0 - 1.0
+  estimationMethod  String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model SamplingRecord {
+  id                    String   @id @default(cuid())
+  productId             String
+  sampledAt             DateTime @default(now())
+  sampledBy             String?
+  measuredPlasticG      Float?
+  measuredPaperG        Float?
+  measuredTotalPackagingG Float?
+  netWeightAtSamplingG  Float?
+  grossWeightAtSamplingG Float?
+  notes                 String?
+  createdAt             DateTime @default(now())
+
+  product               Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ImportBatch {
+  id             String   @id @default(cuid())
+  name           String
+  sourceFileName String?
+  importedAt     DateTime @default(now())
+  rowCount       Int      @default(0)
+  successCount   Int      @default(0)
+  errorCount     Int      @default(0)
+  notes          String?
+
+  products       Product[]
+}
+
+model ProductEstimateHistory {
+  id          String   @id @default(cuid())
+  productId   String
+  oldPlasticG Float?
+  oldPaperG   Float?
+  newPlasticG Float?
+  newPaperG   Float?
+  reason      String?
+  method      String?
+  createdAt   DateTime @default(now())
+
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  entityType    String
+  entityId      String
+  action        String
+  oldValuesJson String?
+  newValuesJson String?
+  createdAt     DateTime @default(now())
+
+  product       Product? @relation("ProductAuditLogs", fields: [entityId], references: [id], map: "AuditLog_productId_fkey")
+
+  @@index([entityType, entityId])
+}
+
+enum PackagingStatus {
+  IMPORTED
+  ESTIMATED
+  SAMPLED
+  REVIEWED
+}
