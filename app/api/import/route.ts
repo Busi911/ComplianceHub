@@ -1,9 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parse } from "csv-parse/sync";
+import * as iconv from "iconv-lite";
 import { prisma } from "@/lib/prisma";
 import { validateProductInput } from "@/lib/validation";
 import { updateProfileAfterSampling } from "@/lib/estimation";
 import { PackagingStatus } from "@prisma/client";
+
+/**
+ * Detects file encoding and returns UTF-8 string.
+ * Handles UTF-8 (with/without BOM) and Windows-1252 / Latin-1 (common in German Excel exports).
+ */
+function decodeBuffer(buffer: Buffer): string {
+  // UTF-8 BOM
+  if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.slice(3).toString("utf-8");
+  }
+  // Try UTF-8 — if it round-trips cleanly, use it
+  const utf8 = buffer.toString("utf-8");
+  // Replacement character U+FFFD indicates invalid UTF-8 bytes → fall back to Windows-1252
+  if (!utf8.includes("\uFFFD")) {
+    return utf8;
+  }
+  // Fall back to Windows-1252 (covers all German umlauts from Excel)
+  return iconv.decode(buffer, "windows-1252");
+}
 
 // CSV column → Product field mapping (flexible, case-insensitive)
 const FIELD_MAP: Record<string, string> = {
@@ -112,7 +132,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const text = await file.text();
+    const arrayBuffer = await file.arrayBuffer();
+    const text = decodeBuffer(Buffer.from(arrayBuffer));
 
     let rows: Record<string, string>[];
     try {
