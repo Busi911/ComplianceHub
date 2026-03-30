@@ -190,6 +190,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Build column mapping from actual CSV headers so the UI can show
+    // which columns were recognized, which were ignored, and what they map to.
+    const FIELD_LABELS: Record<string, string> = {
+      sku: "SKU",
+      internalArticleNumber: "Interne Art.-Nr.",
+      productName: "Produktname",
+      manufacturer: "Hersteller",
+      brand: "Marke",
+      category: "Kategorie",
+      subcategory: "Unterkategorie",
+      ekPrice: "EK-Preis",
+      netWeightG: "Nettogewicht (g)",
+      grossWeightG: "Bruttogewicht (g) ⚡",
+      netLengthMm: "Netto-Länge (mm)",
+      netWidthMm: "Netto-Breite (mm)",
+      netHeightMm: "Netto-Höhe (mm)",
+      grossLengthMm: "Brutto-Länge (mm)",
+      grossWidthMm: "Brutto-Breite (mm)",
+      grossHeightMm: "Brutto-Höhe (mm)",
+      annualUnitsSold: "Jahresabsatz (Stk.)",
+      source: "Quelle",
+    };
+
+    const columnMappings = Object.keys(rows[0]).map((csvCol) => {
+      const field = FIELD_MAP[normalizeKey(csvCol)] ?? null;
+      return {
+        csvColumn: csvCol,
+        mappedField: field,
+        fieldLabel: field ? (FIELD_LABELS[field] ?? field) : null,
+      };
+    });
+    const unmappedColumns = columnMappings
+      .filter((m) => !m.mappedField)
+      .map((m) => m.csvColumn);
+
     const results: {
       row: number;
       sku: string | null;
@@ -336,6 +371,8 @@ export async function POST(request: NextRequest) {
       successCount,
       errorCount,
       results,
+      columnMappings,
+      unmappedColumns,
     });
   } catch (error) {
     console.error("Import error:", error);

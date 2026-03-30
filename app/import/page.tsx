@@ -12,6 +12,12 @@ interface ImportRow {
   data: Record<string, unknown>;
 }
 
+interface ColumnMapping {
+  csvColumn: string;
+  mappedField: string | null;
+  fieldLabel: string | null;
+}
+
 interface ImportResult {
   batchId: string | null;
   dryRun: boolean;
@@ -19,6 +25,8 @@ interface ImportResult {
   successCount: number;
   errorCount: number;
   results: ImportRow[];
+  columnMappings: ColumnMapping[];
+  unmappedColumns: string[];
 }
 
 const STATUS_LABEL: Record<ImportRow["status"], string> = {
@@ -356,6 +364,47 @@ export default function ImportPage() {
             )}
           </div>
 
+          {/* Column mapping panel */}
+          {result.columnMappings?.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="text-sm font-medium text-gray-700 mb-3">Spalten-Mapping</div>
+              <div className="flex flex-wrap gap-2">
+                {result.columnMappings.map((m) => (
+                  <div
+                    key={m.csvColumn}
+                    title={m.fieldLabel ? `→ ${m.fieldLabel}` : "Nicht erkannt — wird ignoriert"}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+                      !m.mappedField
+                        ? "bg-red-50 border-red-200 text-red-700"
+                        : m.mappedField === "grossWeightG"
+                          ? "bg-blue-100 border-blue-300 text-blue-800 font-semibold"
+                          : "bg-green-50 border-green-200 text-green-800"
+                    }`}
+                  >
+                    <span>{m.csvColumn}</span>
+                    {m.fieldLabel ? (
+                      <span className="text-gray-400">→ {m.fieldLabel}</span>
+                    ) : (
+                      <span className="text-red-400">✗ unbekannt</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {result.unmappedColumns.length > 0 && (
+                <p className="text-xs text-red-600 mt-2">
+                  ⚠ {result.unmappedColumns.length} Spalte{result.unmappedColumns.length > 1 ? "n" : ""} nicht erkannt:{" "}
+                  <strong>{result.unmappedColumns.join(", ")}</strong> — diese Felder werden beim Import ignoriert.
+                </p>
+              )}
+              {!result.columnMappings.some((m) => m.mappedField === "grossWeightG") && (
+                <p className="text-xs text-orange-600 mt-2">
+                  ⚠ Keine <strong>Brutto-Gewicht</strong>-Spalte erkannt — ohne Bruttogewicht ist keine Regressions-Schätzung möglich.
+                  Erwarteter Spaltenname: <code>Brutto-Gewicht (g)</code>
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Row details */}
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 text-sm font-medium text-gray-700">
@@ -433,29 +482,32 @@ export default function ImportPage() {
         </h2>
         <div className="text-sm text-gray-600 space-y-2">
           <p>
-            <strong>Pflichtfelder:</strong> SKU, Produktname — alle anderen
-            Felder sind optional, werden aber empfohlen.
+            <strong>Pflichtfelder:</strong> SKU, Produktname — alle anderen Felder sind optional,
+            beeinflussen aber die Datenqualität und Schätzgenauigkeit erheblich.
           </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs space-y-1">
+            <div className="font-semibold text-blue-900 mb-1">Gewichte — wichtiger Unterschied:</div>
+            <div><strong>Netto-Gewicht (g):</strong> Eigengewicht des Produkts allein, ohne jede Verpackung (z. B. die Festplatte selbst).</div>
+            <div><strong>Brutto-Gewicht (g):</strong> Gewicht inkl. vollständiger Verpackung, so wie es beim Händler eingeht (Versandgewicht). <span className="text-blue-700 font-medium">→ Dieser Wert ist für die automatische Schätzung kritisch wichtig.</span></div>
+            <div className="text-blue-600 mt-1">Wenn nur ein Gewicht vorhanden ist, immer <code>Brutto-Gewicht (g)</code> bevorzugen.</div>
+          </div>
           <p>
-            <strong>Gewichte:</strong> Bitte in Gramm (g) angeben. Dezimalwerte
-            mit Komma oder Punkt.
-          </p>
-          <p>
-            <strong>Maße:</strong> Bitte in Millimeter (mm) angeben.
+            <strong>Maße:</strong> In Millimeter (mm). Brutto-Maße (L×B×H) sind besonders wertvoll
+            — sie ermöglichen volumenbasiertes Matching.
           </p>
           <p>
             <strong>EK-Preis:</strong> In Euro, z. B. 29.90 oder 29,90.
           </p>
           <p>
-            <strong>Trennzeichen:</strong> Komma (,) oder Semikolon (;) werden
-            automatisch erkannt.
+            <strong>Trennzeichen:</strong> Komma (,) oder Semikolon (;) werden automatisch erkannt.
           </p>
           <p>
-            <strong>Encoding:</strong> UTF-8 oder UTF-8 mit BOM wird empfohlen.
+            <strong>Encoding:</strong> UTF-8 oder UTF-8 mit BOM wird empfohlen (Standard-Excel-Export).
           </p>
           <p>
-            <strong>Upsert:</strong> Bestehende Produkte werden anhand der SKU
-            aktualisiert.
+            <strong>Re-Import / Upsert:</strong> Bestehende Produkte werden per SKU abgeglichen.
+            Felder die in der neuen CSV-Datei fehlen, bleiben unverändert. Leere Felder (leere Zelle)
+            setzen den Wert zurück auf leer.
           </p>
         </div>
       </div>
