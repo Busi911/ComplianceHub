@@ -1,3 +1,6 @@
+import * as dotenv from "dotenv";
+dotenv.config();
+
 import { PrismaClient, PackagingStatus } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
