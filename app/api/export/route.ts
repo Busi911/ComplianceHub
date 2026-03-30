@@ -26,7 +26,24 @@ export async function GET(request: NextRequest) {
 
     const products = await prisma.product.findMany({
       where,
-      include: {
+      select: {
+        sku: true,
+        internalArticleNumber: true,
+        productName: true,
+        manufacturer: true,
+        brand: true,
+        category: true,
+        subcategory: true,
+        ekPrice: true,
+        netWeightG: true,
+        grossWeightG: true,
+        netLengthMm: true,
+        netWidthMm: true,
+        netHeightMm: true,
+        grossLengthMm: true,
+        grossWidthMm: true,
+        grossHeightMm: true,
+        source: true,
         packagingProfile: true,
         _count: { select: { samplingRecords: true } },
       },
