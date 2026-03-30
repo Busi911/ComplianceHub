@@ -324,19 +324,23 @@ export default function ImportPage() {
                 </div>
               </div>
             </div>
-            {result.dryRun && result.errorCount === 0 && (
+            {result.dryRun && result.successCount > 0 && (
               <div className="mt-3 flex items-center gap-3">
                 <span className="text-sm text-gray-600">
-                  Alles sieht gut aus.
+                  {result.errorCount === 0
+                    ? "Alles sieht gut aus."
+                    : `${result.successCount} von ${result.totalRows} Zeilen werden importiert, ${result.errorCount} Fehler-Zeile${result.errorCount > 1 ? "n" : ""} werden übersprungen.`}
                 </span>
                 <button
                   onClick={() => {
                     setDryRun(false);
                     setTimeout(runImport, 100);
                   }}
-                  className="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-green-700"
+                  className="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-green-700 whitespace-nowrap"
                 >
-                  Jetzt wirklich importieren
+                  {result.errorCount === 0
+                    ? "Jetzt wirklich importieren"
+                    : `${result.successCount} Zeilen importieren`}
                 </button>
               </div>
             )}

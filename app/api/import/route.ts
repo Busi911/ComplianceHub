@@ -177,6 +177,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Filter out rows where every value is empty/whitespace (trailing empty lines
+    // that csv-parse didn't skip because they contained only delimiters)
+    rows = rows.filter((row) =>
+      Object.values(row).some((v) => v != null && String(v).trim() !== "")
+    );
+
     if (rows.length === 0) {
       return NextResponse.json(
         { error: "CSV file is empty" },
