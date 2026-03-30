@@ -16,6 +16,8 @@ interface PriorityProduct {
   category: string | null;
   subcategory: string | null;
   grossWeightG: number | null;
+  samplingSkipReason: string | null;
+  samplingSkippedAt: string | null;
   packagingProfile: {
     status: string;
     confidenceScore: number | null;
@@ -25,22 +27,82 @@ interface PriorityProduct {
   leverageScore: number;
 }
 
+const SKIP_REASON_LABELS: Record<string, string> = {
+  out_of_stock: "Nicht auf Lager",
+  discontinued: "Nicht mehr im Sortiment",
+  other: "Anderer Grund",
+};
+
+function SkipDropdown({
+  productId,
+  onSkip,
+  onCancel,
+}: {
+  productId: string;
+  onSkip: (productId: string, reason: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState("out_of_stock");
+  const [saving, setSaving] = useState(false);
+
+  async function handleConfirm() {
+    setSaving(true);
+    try {
+      await onSkip(productId, reason);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <select
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        className="border border-amber-400 rounded px-2 py-1 text-xs outline-none focus:border-amber-500 bg-white"
+        autoFocus
+      >
+        <option value="out_of_stock">Nicht auf Lager</option>
+        <option value="discontinued">Nicht mehr im Sortiment</option>
+        <option value="other">Anderer Grund</option>
+      </select>
+      <button
+        onClick={handleConfirm}
+        disabled={saving}
+        className="text-xs bg-amber-500 text-white px-2 py-1 rounded hover:bg-amber-600 disabled:opacity-50"
+      >
+        {saving ? "…" : "OK"}
+      </button>
+      <button
+        onClick={onCancel}
+        className="text-xs text-gray-400 hover:text-gray-700 px-1 py-1"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function SamplingPriorityInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const category = searchParams.get("category") ?? "";
   const sortBy = searchParams.get("sortBy") ?? "confidence";
+  const showSkipped = searchParams.get("showSkipped") === "1";
 
   const [products, setProducts] = useState<PriorityProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<string[]>([]);
+  const [skippedCount, setSkippedCount] = useState(0);
+  const [skippingId, setSkippingId] = useState<string | null>(null); // product currently showing skip dropdown
 
-  useEffect(() => {
+  function fetchList() {
     setLoading(true);
     const params = new URLSearchParams();
     if (category) params.set("category", category);
     params.set("sortBy", sortBy);
     params.set("limit", "100");
+    if (showSkipped) params.set("includeSkipped", "1");
 
     Promise.all([
       fetch(`/api/sampling/priority?${params}`).then((r) => r.json()),
@@ -48,21 +110,45 @@ function SamplingPriorityInner() {
     ])
       .then(([priority, productsData]) => {
         setProducts(priority.products ?? []);
+        setSkippedCount(priority.skippedCount ?? 0);
         setCategories(productsData.filterOptions?.categories ?? []);
       })
       .finally(() => setLoading(false));
-  }, [category, sortBy]);
+  }
+
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, sortBy, showSkipped]);
 
   function updateParams(updates: Record<string, string>) {
     const p = new URLSearchParams();
     if (category) p.set("category", category);
     if (sortBy !== "confidence") p.set("sortBy", sortBy);
+    if (showSkipped) p.set("showSkipped", "1");
     for (const [k, v] of Object.entries(updates)) {
       if (v) p.set(k, v);
       else p.delete(k);
     }
     router.push(`/sampling?${p.toString()}`);
   }
+
+  async function skipProduct(productId: string, reason: string) {
+    await fetch("/api/sampling/skip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId, reason }),
+    });
+    setSkippingId(null);
+    fetchList();
+  }
+
+  async function unskipProduct(productId: string) {
+    await fetch(`/api/sampling/skip?productId=${productId}`, { method: "DELETE" });
+    fetchList();
+  }
+
+  const colCount = (sortBy === "leverage" ? 9 : 8) + (showSkipped ? 1 : 0);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -75,10 +161,10 @@ function SamplingPriorityInner() {
           </p>
         </div>
         <Link
-          href="/sampling/batch"
+          href="/sampling/session"
           className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700"
         >
-          Batch-Stichprobe →
+          Wiegesession →
         </Link>
       </div>
 
@@ -119,8 +205,29 @@ function SamplingPriorityInner() {
           </button>
         </div>
 
+        {/* Skipped toggle */}
+        <button
+          onClick={() =>
+            updateParams({ showSkipped: showSkipped ? "" : "1" })
+          }
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
+            showSkipped
+              ? "bg-amber-100 border-amber-400 text-amber-800"
+              : "bg-white border-gray-300 text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Übersprungene
+          {skippedCount > 0 && (
+            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+              showSkipped ? "bg-amber-400 text-white" : "bg-gray-200 text-gray-700"
+            }`}>
+              {skippedCount}
+            </span>
+          )}
+        </button>
+
         <span className="text-sm text-gray-500">
-          {loading ? "Lädt…" : `${products.length} Produkte ohne eigene Stichprobe`}
+          {loading ? "Lädt…" : `${products.length} Produkte${showSkipped ? " (inkl. übersprungener)" : " ohne eigene Stichprobe"}`}
         </span>
       </div>
 
@@ -128,6 +235,13 @@ function SamplingPriorityInner() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-800">
           <strong>Hebelwirkung:</strong> Produkte ganz oben haben die meisten Gleichartigen ohne Messung.
           Eine Wiegung verbessert sofort die Schätzung aller ähnlichen Produkte.
+        </div>
+      )}
+
+      {showSkipped && skippedCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-sm text-amber-800">
+          Übersprungene Produkte werden in der normalen Prioritätsliste ausgeblendet.
+          Klicke <strong>Wiederherstellen</strong>, um ein Produkt wieder in die Liste aufzunehmen.
         </div>
       )}
 
@@ -152,69 +266,116 @@ function SamplingPriorityInner() {
             {loading &&
               [...Array(8)].map((_, i) => (
                 <tr key={i}>
-                  {[...Array(sortBy === "leverage" ? 8 : 7)].map((_, j) => (
+                  {[...Array(colCount)].map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 bg-gray-100 rounded animate-pulse" />
                     </td>
                   ))}
                 </tr>
               ))}
-            {!loading && products.map((p, idx) => (
-              <tr key={p.id} className={`hover:bg-gray-50 ${sortBy === "leverage" && p.leverageScore > 5 ? "bg-blue-50/30" : ""}`}>
-                <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
-                <td className="px-4 py-3">
-                  <div className="font-mono text-xs text-blue-600">{p.sku}</div>
-                  {p.internalArticleNumber && (
-                    <div className="text-xs text-gray-400">{p.internalArticleNumber}</div>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <Link href={`/products/${p.id}`} className="hover:text-blue-600 font-medium">
-                    {p.productName}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">
-                  {p.category}{p.subcategory ? ` / ${p.subcategory}` : ""}
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">
-                  {p.brand ?? p.manufacturer ?? "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={p.packagingProfile?.status ?? "IMPORTED"} size="sm" />
-                </td>
-                <td className="px-4 py-3 min-w-[120px]">
-                  <ConfidenceBar score={p.packagingProfile?.confidenceScore ?? null} showLabel={false} />
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {p.packagingProfile?.confidenceScore != null
-                      ? `${Math.round(p.packagingProfile.confidenceScore * 100)}%`
-                      : "Kein Profil"}
-                  </div>
-                </td>
-                {sortBy === "leverage" && (
-                  <td className="px-4 py-3 text-right">
-                    {p.leverageScore > 0 ? (
-                      <span className={`text-xs font-bold ${p.leverageScore > 5 ? "text-blue-700" : "text-gray-500"}`}>
-                        {p.leverageScore > 0 ? `+${p.leverageScore}` : "—"}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-300">—</span>
+            {!loading && products.map((p, idx) => {
+              const isSkipped = !!p.samplingSkipReason;
+              const isShowingSkipDropdown = skippingId === p.id;
+
+              return (
+                <tr
+                  key={p.id}
+                  className={`${
+                    isSkipped
+                      ? "bg-amber-50/60 opacity-70"
+                      : sortBy === "leverage" && p.leverageScore > 5
+                      ? "bg-blue-50/30 hover:bg-blue-50/60"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
+                  <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
+                  <td className="px-4 py-3">
+                    <div className={`font-mono text-xs text-blue-600 ${isSkipped ? "line-through" : ""}`}>
+                      {p.sku}
+                    </div>
+                    {p.internalArticleNumber && (
+                      <div className="text-xs text-gray-400">{p.internalArticleNumber}</div>
                     )}
                   </td>
-                )}
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/products/${p.id}#sampling`}
-                    className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
-                  >
-                    + Wiegen
-                  </Link>
-                </td>
-              </tr>
-            ))}
+                  <td className="px-4 py-3">
+                    <Link href={`/products/${p.id}`} className="hover:text-blue-600 font-medium">
+                      {p.productName}
+                    </Link>
+                    {isSkipped && (
+                      <div className="text-xs text-amber-600 mt-0.5">
+                        ⏭ {SKIP_REASON_LABELS[p.samplingSkipReason!] ?? p.samplingSkipReason}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">
+                    {p.category}{p.subcategory ? ` / ${p.subcategory}` : ""}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">
+                    {p.brand ?? p.manufacturer ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={p.packagingProfile?.status ?? "IMPORTED"} size="sm" />
+                  </td>
+                  <td className="px-4 py-3 min-w-[120px]">
+                    <ConfidenceBar score={p.packagingProfile?.confidenceScore ?? null} showLabel={false} />
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {p.packagingProfile?.confidenceScore != null
+                        ? `${Math.round(p.packagingProfile.confidenceScore * 100)}%`
+                        : "Kein Profil"}
+                    </div>
+                  </td>
+                  {sortBy === "leverage" && (
+                    <td className="px-4 py-3 text-right">
+                      {p.leverageScore > 0 ? (
+                        <span className={`text-xs font-bold ${p.leverageScore > 5 ? "text-blue-700" : "text-gray-500"}`}>
+                          {`+${p.leverageScore}`}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
+                    </td>
+                  )}
+                  <td className="px-4 py-3">
+                    {isSkipped ? (
+                      <button
+                        onClick={() => unskipProduct(p.id)}
+                        className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded hover:bg-amber-200 whitespace-nowrap"
+                      >
+                        ↩ Wiederherstellen
+                      </button>
+                    ) : isShowingSkipDropdown ? (
+                      <SkipDropdown
+                        productId={p.id}
+                        onSkip={skipProduct}
+                        onCancel={() => setSkippingId(null)}
+                      />
+                    ) : (
+                      <div className="flex gap-1.5 flex-wrap">
+                        <Link
+                          href={`/products/${p.id}#sampling`}
+                          className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 whitespace-nowrap"
+                        >
+                          + Wiegen
+                        </Link>
+                        <button
+                          onClick={() => setSkippingId(p.id)}
+                          className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded hover:bg-amber-100 hover:text-amber-700 whitespace-nowrap"
+                          title="Produkt in Prioritätsliste überspringen"
+                        >
+                          ⏭
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {!loading && products.length === 0 && (
               <tr>
-                <td colSpan={sortBy === "leverage" ? 9 : 8} className="px-4 py-8 text-center text-gray-400">
-                  Alle Produkte haben bereits eigene Stichproben.
+                <td colSpan={colCount} className="px-4 py-8 text-center text-gray-400">
+                  {showSkipped
+                    ? "Keine übersprungenen Produkte vorhanden."
+                    : "Alle Produkte haben bereits eigene Stichproben."}
                 </td>
               </tr>
             )}

@@ -27,9 +27,11 @@ model Product {
   grossLengthMm    Float?
   grossWidthMm     Float?
   grossHeightMm    Float?
-  annualUnitsSold  Int?
-  source           String?
-  importBatchId    String?
+  annualUnitsSold      Int?
+  samplingSkipReason   String?   // null = not skipped; "out_of_stock" | "discontinued" | "other"
+  samplingSkippedAt    DateTime?
+  source               String?
+  importBatchId        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

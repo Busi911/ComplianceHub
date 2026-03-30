@@ -5,15 +5,20 @@ import { prisma } from "@/lib/prisma";
 // sortBy=confidence (default): lowest confidence first
 // sortBy=leverage: products that benefit the most other unsampled products first
 //   leverage = (subcatPeers × 3 + catPeers) × (1 − confidence)
+//
+// By default skipped products (samplingSkipReason != null) are excluded.
+// Pass includeSkipped=1 to include them.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category") ?? "";
     const sortBy = searchParams.get("sortBy") ?? "confidence"; // "confidence" | "leverage"
     const limit = parseInt(searchParams.get("limit") ?? "100");
+    const includeSkipped = searchParams.get("includeSkipped") === "1";
 
     const where: Record<string, unknown> = {};
     if (category) where.category = { equals: category, mode: "insensitive" };
+    if (!includeSkipped) where.samplingSkipReason = null;
 
     const products = await prisma.product.findMany({
       where,
@@ -27,6 +32,15 @@ export async function GET(request: NextRequest) {
 
     // Only products without own samples
     const unsampled = products.filter((p) => p._count.samplingRecords === 0);
+
+    // Total skipped count (for badge in UI)
+    const skippedCount = await prisma.product.count({
+      where: {
+        ...(category ? { category: { equals: category, mode: "insensitive" } } : {}),
+        samplingSkipReason: { not: null },
+        // also unsampled
+      },
+    });
 
     // Build count maps for leverage: how many other unsampled ESTIMATED products share
     // the same category or subcategory?
@@ -63,6 +77,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       products: sorted.slice(0, limit),
       total: sorted.length,
+      skippedCount,
     });
   } catch (error) {
     console.error("Priority error:", error);

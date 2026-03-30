@@ -27,10 +27,28 @@ interface SessionRow {
   error: string | null;
 }
 
+interface ResolveResult {
+  identifier: string;
+  product: ProductHit;
+}
+
 export default function SamplingSessionPage() {
+  const [addTab, setAddTab] = useState<"search" | "upload">("search");
+
+  // Search tab state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ProductHit[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // Upload tab state
+  const [uploadText, setUploadText] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadResolved, setUploadResolved] = useState<ResolveResult[]>([]);
+  const [uploadUnresolved, setUploadUnresolved] = useState<string[]>([]);
+  const [uploadDone, setUploadDone] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Session state
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [globalSampledBy, setGlobalSampledBy] = useState("");
   const [savedCount, setSavedCount] = useState(0);
@@ -144,9 +162,93 @@ export default function SamplingSessionPage() {
     setSavingAll(false);
   }
 
+  // ── Upload tab helpers ──────────────────────────────────────────────────────
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setUploadText(String(ev.target?.result ?? ""));
+      setUploadDone(false);
+      setUploadResolved([]);
+      setUploadUnresolved([]);
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  async function resolveUpload() {
+    // Parse: one identifier per line, ignore empty lines and lines starting with #
+    // Also detect CSV: if first non-empty line has commas, try to detect the identifier column
+    const lines = uploadText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"));
+
+    if (lines.length === 0) return;
+
+    // CSV detection: if first line contains semicolons or commas, parse as CSV
+    let identifiers: string[] = [];
+    const sep = lines[0].includes(";") ? ";" : lines[0].includes(",") ? "," : null;
+    if (sep) {
+      // Has header row — look for a column called sku / artikelnummer / article / id / nummer
+      const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase().replace(/["\s]/g, ""));
+      const skuIdx = headers.findIndex((h) =>
+        ["sku", "artikelnummer", "articlenumber", "article", "artnr", "artnummer",
+         "internenummer", "interneartnr", "id"].includes(h)
+      );
+      const colIdx = skuIdx >= 0 ? skuIdx : 0; // fallback: first column
+      for (const line of lines.slice(1)) {
+        const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ""));
+        if (cols[colIdx]) identifiers.push(cols[colIdx]);
+      }
+    } else {
+      identifiers = lines;
+    }
+
+    identifiers = [...new Set(identifiers.filter(Boolean))];
+    if (identifiers.length === 0) return;
+
+    setUploadLoading(true);
+    try {
+      const res = await fetch("/api/products/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiers }),
+      });
+      const data = await res.json();
+      setUploadResolved(data.resolved ?? []);
+      setUploadUnresolved(data.unresolved ?? []);
+      setUploadDone(true);
+    } catch {
+      setUploadUnresolved(identifiers);
+      setUploadDone(true);
+    } finally {
+      setUploadLoading(false);
+    }
+  }
+
+  function addAllResolved() {
+    for (const { product } of uploadResolved) {
+      addProduct(product);
+    }
+    setUploadText("");
+    setUploadResolved([]);
+    setUploadUnresolved([]);
+    setUploadDone(false);
+    if (fileRef.current) fileRef.current.value = "";
+    setAddTab("search");
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const filledRows = rows.filter(
     (r) => !r.saved && (r.plasticG || r.paperG || r.totalG)
   ).length;
+
+  const newFromUpload = uploadResolved.filter(
+    (r) => !rows.some((row) => row.product.id === r.product.id)
+  );
 
   return (
     <>
@@ -224,84 +326,250 @@ export default function SamplingSessionPage() {
           </div>
         </div>
 
-        {/* Product search */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2 no-print">
-          <label className="text-sm font-medium text-gray-700">
-            Produkt hinzufügen
-          </label>
-          <div className="relative">
-            <input
-              ref={searchRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                search(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setSearchQuery("");
-                  setSearchResults([]);
-                }
-                if (e.key === "Enter" && searchResults.length === 1) {
-                  addProduct(searchResults[0]);
-                }
-              }}
-              placeholder="SKU, interne Art.-Nr. oder Produktname …"
-              className="w-full border border-gray-300 rounded-lg px-3 py-3 text-base outline-none focus:border-blue-400"
-              autoFocus
-            />
-            {searching && (
-              <div className="absolute right-3 top-3.5 text-gray-400 text-xs">
-                Sucht…
-              </div>
-            )}
-
-            {searchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                {searchResults.map((p) => {
-                  const alreadyAdded = rows.some((r) => r.product.id === p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => !alreadyAdded && addProduct(p)}
-                      disabled={alreadyAdded}
-                      className={`w-full text-left px-4 py-3 text-sm border-b border-gray-100 last:border-0 flex items-center justify-between gap-4 ${
-                        alreadyAdded
-                          ? "opacity-40 cursor-default"
-                          : "hover:bg-blue-50 cursor-pointer"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <span className="font-mono text-xs text-blue-600 mr-2">
-                          {p.sku}
-                        </span>
-                        {p.internalArticleNumber && (
-                          <span className="text-xs text-gray-400 mr-2">
-                            {p.internalArticleNumber}
-                          </span>
-                        )}
-                        <span className="font-medium">{p.productName}</span>
-                      </div>
-                      <div className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
-                        {p.category}
-                        {alreadyAdded && (
-                          <span className="ml-2 text-green-600">✓</span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+        {/* ── Add product panel ── */}
+        <div className="bg-white border border-gray-200 rounded-lg no-print overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setAddTab("search")}
+              className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+                addTab === "search"
+                  ? "border-b-2 border-blue-600 text-blue-700 bg-blue-50/40"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+              }`}
+            >
+              Suche
+            </button>
+            <button
+              onClick={() => setAddTab("upload")}
+              className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+                addTab === "upload"
+                  ? "border-b-2 border-blue-600 text-blue-700 bg-blue-50/40"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+              }`}
+            >
+              Liste / CSV hochladen
+            </button>
           </div>
-          {rows.length > 0 && (
-            <p className="text-xs text-gray-400">
-              {rows.length} Produkt{rows.length !== 1 ? "e" : ""} in der Session
-              {savedCount > 0 && (
-                <span className="text-green-600 ml-2">· ✓ {savedCount} gespeichert</span>
+
+          {/* Search tab */}
+          {addTab === "search" && (
+            <div className="p-4 space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Produkt hinzufügen
+              </label>
+              <div className="relative">
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    search(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setSearchQuery("");
+                      setSearchResults([]);
+                    }
+                    if (e.key === "Enter" && searchResults.length === 1) {
+                      addProduct(searchResults[0]);
+                    }
+                  }}
+                  placeholder="SKU, interne Art.-Nr. oder Produktname …"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-3 text-base outline-none focus:border-blue-400"
+                  autoFocus
+                />
+                {searching && (
+                  <div className="absolute right-3 top-3.5 text-gray-400 text-xs">
+                    Sucht…
+                  </div>
+                )}
+
+                {searchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                    {searchResults.map((p) => {
+                      const alreadyAdded = rows.some((r) => r.product.id === p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => !alreadyAdded && addProduct(p)}
+                          disabled={alreadyAdded}
+                          className={`w-full text-left px-4 py-3 text-sm border-b border-gray-100 last:border-0 flex items-center justify-between gap-4 ${
+                            alreadyAdded
+                              ? "opacity-40 cursor-default"
+                              : "hover:bg-blue-50 cursor-pointer"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <span className="font-mono text-xs text-blue-600 mr-2">
+                              {p.sku}
+                            </span>
+                            {p.internalArticleNumber && (
+                              <span className="text-xs text-gray-400 mr-2">
+                                {p.internalArticleNumber}
+                              </span>
+                            )}
+                            <span className="font-medium">{p.productName}</span>
+                          </div>
+                          <div className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                            {p.category}
+                            {alreadyAdded && (
+                              <span className="ml-2 text-green-600">✓</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {rows.length > 0 && (
+                <p className="text-xs text-gray-400">
+                  {rows.length} Produkt{rows.length !== 1 ? "e" : ""} in der Session
+                  {savedCount > 0 && (
+                    <span className="text-green-600 ml-2">· ✓ {savedCount} gespeichert</span>
+                  )}
+                </p>
               )}
-            </p>
+            </div>
+          )}
+
+          {/* Upload tab */}
+          {addTab === "upload" && (
+            <div className="p-4 space-y-3">
+              <div>
+                <p className="text-sm text-gray-700 font-medium mb-1">
+                  CSV oder Textdatei hochladen
+                </p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Eine Zeile pro Artikelnummer (SKU oder interne Art.-Nr.).
+                  Oder CSV mit Spaltenüberschrift <code className="bg-gray-100 px-1 rounded">sku</code> /
+                  {" "}<code className="bg-gray-100 px-1 rounded">artikelnummer</code>.
+                  Nicht erkannte Artikel werden als Fehler angezeigt und übersprungen.
+                </p>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 inline-flex items-center gap-2">
+                    📂 Datei wählen
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept=".csv,.txt,.tsv"
+                      className="sr-only"
+                      onChange={handleFileChange}
+                    />
+                  </label>
+                  <span className="text-xs text-gray-400">oder direkt einfügen:</span>
+                </div>
+              </div>
+
+              <textarea
+                value={uploadText}
+                onChange={(e) => {
+                  setUploadText(e.target.value);
+                  setUploadDone(false);
+                  setUploadResolved([]);
+                  setUploadUnresolved([]);
+                }}
+                placeholder={"ART-001\nART-002\nART-003\n..."}
+                rows={6}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-400 resize-y"
+              />
+
+              <div className="flex gap-2 items-center">
+                <button
+                  onClick={resolveUpload}
+                  disabled={!uploadText.trim() || uploadLoading}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40"
+                >
+                  {uploadLoading ? "Suche…" : "Auflösen"}
+                </button>
+                {uploadText && (
+                  <button
+                    onClick={() => {
+                      setUploadText("");
+                      setUploadResolved([]);
+                      setUploadUnresolved([]);
+                      setUploadDone(false);
+                      if (fileRef.current) fileRef.current.value = "";
+                    }}
+                    className="text-sm text-gray-400 hover:text-gray-700"
+                  >
+                    Leeren
+                  </button>
+                )}
+              </div>
+
+              {/* Upload results */}
+              {uploadDone && (
+                <div className="space-y-2">
+                  {uploadResolved.length > 0 && (
+                    <div className="border border-green-200 rounded-lg overflow-hidden">
+                      <div className="bg-green-50 px-3 py-2 flex items-center justify-between">
+                        <span className="text-sm font-medium text-green-800">
+                          ✓ {uploadResolved.length} Produkt{uploadResolved.length !== 1 ? "e" : ""} gefunden
+                        </span>
+                        {newFromUpload.length > 0 && (
+                          <button
+                            onClick={addAllResolved}
+                            className="text-xs bg-green-600 text-white px-3 py-1 rounded-full hover:bg-green-700 font-medium"
+                          >
+                            Alle {newFromUpload.length} hinzufügen
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                        {uploadResolved.map(({ identifier, product }) => {
+                          const alreadyInSession = rows.some((r) => r.product.id === product.id);
+                          return (
+                            <div key={product.id} className="px-3 py-2 flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <span className="font-mono text-xs text-gray-400 mr-1">{identifier}</span>
+                                <span className="text-sm font-medium text-gray-800">{product.productName}</span>
+                                {product.category && (
+                                  <span className="text-xs text-gray-400 ml-1">· {product.category}</span>
+                                )}
+                              </div>
+                              {alreadyInSession ? (
+                                <span className="text-xs text-green-600 flex-shrink-0">✓ bereits drin</span>
+                              ) : (
+                                <button
+                                  onClick={() => addProduct(product)}
+                                  className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded hover:bg-green-200 flex-shrink-0"
+                                >
+                                  + Hinzufügen
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {uploadUnresolved.length > 0 && (
+                    <div className="border border-red-200 rounded-lg overflow-hidden">
+                      <div className="bg-red-50 px-3 py-2">
+                        <span className="text-sm font-medium text-red-800">
+                          ✗ {uploadUnresolved.length} nicht gefunden
+                        </span>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto divide-y divide-gray-100">
+                        {uploadUnresolved.map((id) => (
+                          <div key={id} className="px-3 py-1.5 font-mono text-xs text-red-600">
+                            {id}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {uploadResolved.length === 0 && uploadUnresolved.length === 0 && (
+                    <p className="text-sm text-gray-400">Keine Identifier gefunden.</p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -579,7 +847,7 @@ export default function SamplingSessionPage() {
           <div className="text-center py-16 text-gray-400 no-print">
             <div className="text-5xl mb-3">⚖️</div>
             <div className="font-medium text-gray-500">Noch keine Produkte in der Session</div>
-            <div className="text-sm mt-1">SKU oder Artikelnummer oben eingeben</div>
+            <div className="text-sm mt-1">SKU oder Artikelnummer oben eingeben oder Liste hochladen</div>
           </div>
         )}
       </div>
