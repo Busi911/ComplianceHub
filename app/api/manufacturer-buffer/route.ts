@@ -41,6 +41,7 @@ const BUFFER_FIELD_MAP: Record<string, string> = {
   "artikel-nr": "internalArticleNr",
   "interne artikelnummer": "internalArticleNr",
   "interne art.-nr": "internalArticleNr",
+  "interne art-nr": "internalArticleNr",
   "int. art.-nr": "internalArticleNr",
   "int.art.nr": "internalArticleNr",
   "interne nr": "internalArticleNr",
