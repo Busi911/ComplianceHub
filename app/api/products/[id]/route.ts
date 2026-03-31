@@ -41,6 +41,7 @@ export async function PUT(
     const body = await request.json();
 
     const {
+      internalArticleNumber,
       manufacturer,
       brand,
       productName,
@@ -55,6 +56,7 @@ export async function PUT(
       grossLengthMm,
       grossWidthMm,
       grossHeightMm,
+      annualUnitsSold,
     } = body;
 
     const existing = await prisma.product.findUnique({ where: { id } });
@@ -65,6 +67,7 @@ export async function PUT(
     const product = await prisma.product.update({
       where: { id },
       data: {
+        internalArticleNumber: internalArticleNumber || null,
         manufacturer,
         brand,
         productName,
@@ -83,6 +86,8 @@ export async function PUT(
           grossWidthMm != null ? parseFloat(grossWidthMm) : undefined,
         grossHeightMm:
           grossHeightMm != null ? parseFloat(grossHeightMm) : undefined,
+        annualUnitsSold:
+          annualUnitsSold != null ? parseInt(String(annualUnitsSold), 10) : null,
       },
     });
 

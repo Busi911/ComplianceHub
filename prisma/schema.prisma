@@ -10,11 +10,12 @@ datasource db {
 }
 
 model Product {
-  id               String   @id @default(cuid())
-  sku              String   @unique
-  manufacturer     String?
-  brand            String?
-  productName      String
+  id                    String   @id @default(cuid())
+  sku                   String   @unique
+  internalArticleNumber String?
+  manufacturer          String?
+  brand                 String?
+  productName           String
   category         String?
   subcategory      String?
   ekPrice          Float?
@@ -26,8 +27,11 @@ model Product {
   grossLengthMm    Float?
   grossWidthMm     Float?
   grossHeightMm    Float?
-  source           String?
-  importBatchId    String?
+  annualUnitsSold      Int?
+  samplingSkipReason   String?   // null = not skipped; "out_of_stock" | "discontinued" | "other"
+  samplingSkippedAt    DateTime?
+  source               String?
+  importBatchId        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -55,6 +59,7 @@ model ProductPackagingProfile {
   currentPaperG     Float?
   confidenceScore   Float?   // 0.0 - 1.0
   estimationMethod  String?
+  estimationErrorPct Float?  // % error when first measured vs prior estimate (+ = overestimated)
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -73,6 +78,8 @@ model SamplingRecord {
   netWeightAtSamplingG  Float?
   grossWeightAtSamplingG Float?
   notes                 String?
+  isOutlier             Boolean  @default(false)
+  outlierReason         String?
   createdAt             DateTime @default(now())
 
   product               Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -121,6 +128,21 @@ model AuditLog {
   product       Product? @relation("ProductAuditLogs", fields: [entityId], references: [id], map: "AuditLog_productId_fkey")
 
   @@index([entityType, entityId])
+}
+
+model BrandProfile {
+  id              String   @id @default(cuid())
+  entityType      String   // "brand" | "manufacturer"
+  name            String
+  notes           String?  // free-text observations about packaging behaviour
+  packagingStyle  String?  // e.g. "minimal", "oversized", "eco-freundlich"
+  typicalMaterial String?  // e.g. "überwiegend Plastik", "überwiegend Karton"
+  tagsJson        String?  // JSON array of tag strings
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([entityType, name])
+  @@index([name])
 }
 
 enum PackagingStatus {

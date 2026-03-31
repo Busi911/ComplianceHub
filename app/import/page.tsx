@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
 interface ImportRow {
@@ -12,6 +12,12 @@ interface ImportRow {
   data: Record<string, unknown>;
 }
 
+interface ColumnMapping {
+  csvColumn: string;
+  mappedField: string | null;
+  fieldLabel: string | null;
+}
+
 interface ImportResult {
   batchId: string | null;
   dryRun: boolean;
@@ -19,6 +25,9 @@ interface ImportResult {
   successCount: number;
   errorCount: number;
   results: ImportRow[];
+  columnMappings: ColumnMapping[];
+  unmappedColumns: string[];
+  detectedDelimiter?: string;
 }
 
 const STATUS_LABEL: Record<ImportRow["status"], string> = {
@@ -35,12 +44,12 @@ const STATUS_COLOR: Record<ImportRow["status"], string> = {
   error: "text-red-700 bg-red-50",
 };
 
-const SAMPLE_CSV = `SKU;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis;Netto-Gewicht;Brutto-Gewicht;Netto-Länge;Netto-Breite;Netto-Höhe;Brutto-Länge;Brutto-Breite;Brutto-Höhe
-WD-HDD-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32
-SAM-SSD-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15
-LG-MON-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120
-LOG-MOU-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65
-TPL-CAB-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30`;
+const SAMPLE_CSV = `SKU;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis (EUR);Netto-Gewicht (g);Brutto-Gewicht (g);Netto-Länge (mm);Netto-Breite (mm);Netto-Höhe (mm);Brutto-Länge (mm);Brutto-Breite (mm);Brutto-Höhe (mm);Jahresabsatz (Stk.)
+WD-HDD-001;ART-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32;250
+SAM-SSD-002;ART-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15;500
+LG-MON-003;ART-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120;80
+LOG-MOU-004;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65;150
+TPL-CAB-005;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30;1200`;
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -50,7 +59,17 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [totalMs, setTotalMs] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   function handleFile(f: File) {
     setFile(f);
@@ -75,6 +94,12 @@ export default function ImportPage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setTotalMs(null);
+    setElapsedMs(0);
+    startTimeRef.current = Date.now();
+    timerRef.current = setInterval(() => {
+      setElapsedMs(Date.now() - (startTimeRef.current ?? Date.now()));
+    }, 100);
 
     try {
       const formData = new FormData();
@@ -93,8 +118,17 @@ export default function ImportPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");
     } finally {
+      if (timerRef.current) clearInterval(timerRef.current);
+      const duration = Date.now() - (startTimeRef.current ?? Date.now());
+      setTotalMs(duration);
+      setElapsedMs(null);
       setLoading(false);
     }
+  }
+
+  function formatMs(ms: number): string {
+    if (ms < 1000) return `${ms} ms`;
+    return `${(ms / 1000).toFixed(1)} s`;
   }
 
   function downloadSample() {
@@ -211,9 +245,11 @@ export default function ImportPage() {
         {/* Field mapping info */}
         <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
           <strong className="text-gray-700">Unterstützte Spalten:</strong>{" "}
-          SKU / Art.-Nr., Produktname / Bezeichnung, Hersteller, Marke /
-          Brand, Kategorie, Unterkategorie, EK-Preis / EK Preis, Netto-Gewicht
-          (g), Brutto-Gewicht (g), Netto/Brutto L/B/H (mm).
+          SKU / Art.-Nr., Interne Art.-Nr., Produktname / Bezeichnung,
+          Hersteller, Marke / Brand, Kategorie, Unterkategorie,
+          EK-Preis (EUR), Netto-Gewicht (g), Brutto-Gewicht (g),
+          Netto/Brutto L/B/H (mm). Einheiten in Klammern in der
+          Spaltenüberschrift werden automatisch ignoriert.
           Trennzeichen: Komma oder Semikolon.
         </div>
 
@@ -224,11 +260,16 @@ export default function ImportPage() {
             className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading
-              ? "Importiert…"
+              ? `Importiert… ${elapsedMs != null ? formatMs(elapsedMs) : ""}`
               : dryRun
                 ? "Vorschau starten"
                 : "Jetzt importieren"}
           </button>
+          {totalMs != null && !loading && (
+            <span className="text-xs text-gray-400">
+              Abgeschlossen in {formatMs(totalMs)}
+            </span>
+          )}
           {file && (
             <button
               onClick={() => {
@@ -272,6 +313,9 @@ export default function ImportPage() {
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
                   {result.totalRows} Zeilen verarbeitet
+                  {totalMs != null && (
+                    <span className="text-gray-400 ml-2">· {formatMs(totalMs)}</span>
+                  )}
                 </p>
               </div>
               <div className="flex gap-4 text-sm">
@@ -289,19 +333,23 @@ export default function ImportPage() {
                 </div>
               </div>
             </div>
-            {result.dryRun && result.errorCount === 0 && (
+            {result.dryRun && result.successCount > 0 && (
               <div className="mt-3 flex items-center gap-3">
                 <span className="text-sm text-gray-600">
-                  Alles sieht gut aus.
+                  {result.errorCount === 0
+                    ? "Alles sieht gut aus."
+                    : `${result.successCount} von ${result.totalRows} Zeilen werden importiert, ${result.errorCount} Fehler-Zeile${result.errorCount > 1 ? "n" : ""} werden übersprungen.`}
                 </span>
                 <button
                   onClick={() => {
                     setDryRun(false);
                     setTimeout(runImport, 100);
                   }}
-                  className="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-green-700"
+                  className="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-green-700 whitespace-nowrap"
                 >
-                  Jetzt wirklich importieren
+                  {result.errorCount === 0
+                    ? "Jetzt wirklich importieren"
+                    : `${result.successCount} Zeilen importieren`}
                 </button>
               </div>
             )}
@@ -316,6 +364,67 @@ export default function ImportPage() {
               </div>
             )}
           </div>
+
+          {/* Column mapping panel */}
+          {result.columnMappings?.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="text-sm font-medium text-gray-700">Spalten-Mapping</div>
+                {result.detectedDelimiter && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-mono ${
+                    result.detectedDelimiter.includes("Semikolon")
+                      ? "bg-green-50 border-green-200 text-green-700"
+                      : "bg-amber-50 border-amber-300 text-amber-700"
+                  }`}>
+                    Trennzeichen: {result.detectedDelimiter}
+                    {result.detectedDelimiter.includes("Komma") && " ⚠ (erwartet: Semikolon)"}
+                  </span>
+                )}
+              </div>
+              {result.columnMappings.some((m) => m.mappedField === "_systemId") && (
+                <div className="mb-2 text-xs bg-purple-50 border border-purple-200 rounded px-3 py-2 text-purple-800">
+                  🔑 <strong>System-ID erkannt</strong> — Datensätze werden per permanenter ID gesucht,
+                  nicht per SKU. Die SKU kann damit korrigiert werden.
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {result.columnMappings.map((m) => (
+                  <div
+                    key={m.csvColumn}
+                    title={m.fieldLabel ? `→ ${m.fieldLabel}` : "Nicht erkannt — wird ignoriert"}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+                      !m.mappedField
+                        ? "bg-red-50 border-red-200 text-red-700"
+                        : m.mappedField === "_systemId"
+                          ? "bg-purple-100 border-purple-300 text-purple-800 font-semibold"
+                          : m.mappedField === "grossWeightG"
+                            ? "bg-blue-100 border-blue-300 text-blue-800 font-semibold"
+                            : "bg-green-50 border-green-200 text-green-800"
+                    }`}
+                  >
+                    <span>{m.csvColumn}</span>
+                    {m.fieldLabel ? (
+                      <span className="text-gray-400">→ {m.fieldLabel}</span>
+                    ) : (
+                      <span className="text-red-400">✗ unbekannt</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {result.unmappedColumns.length > 0 && (
+                <p className="text-xs text-red-600 mt-2">
+                  ⚠ {result.unmappedColumns.length} Spalte{result.unmappedColumns.length > 1 ? "n" : ""} nicht erkannt:{" "}
+                  <strong>{result.unmappedColumns.join(", ")}</strong> — diese Felder werden beim Import ignoriert.
+                </p>
+              )}
+              {!result.columnMappings.some((m) => m.mappedField === "grossWeightG") && (
+                <p className="text-xs text-orange-600 mt-2">
+                  ⚠ Keine <strong>Brutto-Gewicht</strong>-Spalte erkannt — ohne Bruttogewicht ist keine Regressions-Schätzung möglich.
+                  Erwarteter Spaltenname: <code>Brutto-Gewicht (g)</code>
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Row details */}
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -394,30 +503,47 @@ export default function ImportPage() {
         </h2>
         <div className="text-sm text-gray-600 space-y-2">
           <p>
-            <strong>Pflichtfelder:</strong> SKU, Produktname — alle anderen
-            Felder sind optional, werden aber empfohlen.
+            <strong>Pflichtfelder:</strong> SKU, Produktname — alle anderen Felder sind optional,
+            beeinflussen aber die Datenqualität und Schätzgenauigkeit erheblich.
           </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs space-y-1">
+            <div className="font-semibold text-blue-900 mb-1">Gewichte — wichtiger Unterschied:</div>
+            <div><strong>Netto-Gewicht (g):</strong> Eigengewicht des Produkts allein, ohne jede Verpackung (z. B. die Festplatte selbst).</div>
+            <div><strong>Brutto-Gewicht (g):</strong> Gewicht inkl. vollständiger Verpackung, so wie es beim Händler eingeht (Versandgewicht). <span className="text-blue-700 font-medium">→ Dieser Wert ist für die automatische Schätzung kritisch wichtig.</span></div>
+            <div className="text-blue-600 mt-1">Wenn nur ein Gewicht vorhanden ist, immer <code>Brutto-Gewicht (g)</code> bevorzugen.</div>
+          </div>
           <p>
-            <strong>Gewichte:</strong> Bitte in Gramm (g) angeben. Dezimalwerte
-            mit Komma oder Punkt.
-          </p>
-          <p>
-            <strong>Maße:</strong> Bitte in Millimeter (mm) angeben.
+            <strong>Maße:</strong> In Millimeter (mm). Brutto-Maße (L×B×H) sind besonders wertvoll
+            — sie ermöglichen volumenbasiertes Matching.
           </p>
           <p>
             <strong>EK-Preis:</strong> In Euro, z. B. 29.90 oder 29,90.
           </p>
           <p>
-            <strong>Trennzeichen:</strong> Komma (,) oder Semikolon (;) werden
-            automatisch erkannt.
+            <strong>Trennzeichen:</strong> Komma (,) oder Semikolon (;) werden automatisch erkannt.
           </p>
           <p>
-            <strong>Encoding:</strong> UTF-8 oder UTF-8 mit BOM wird empfohlen.
+            <strong>Encoding:</strong> UTF-8 oder UTF-8 mit BOM wird empfohlen (Standard-Excel-Export).
           </p>
           <p>
-            <strong>Upsert:</strong> Bestehende Produkte werden anhand der SKU
-            aktualisiert.
+            <strong>Re-Import / Upsert:</strong> Bestehende Produkte werden per SKU abgeglichen.
+            Felder die in der neuen CSV-Datei fehlen, bleiben unverändert. Leere Felder (leere Zelle)
+            setzen den Wert zurück auf leer.
           </p>
+          <div className="bg-purple-50 border border-purple-200 rounded p-3 space-y-1">
+            <p className="font-semibold text-purple-900">🔑 SKU korrigieren via System-ID</p>
+            <p>
+              Um die SKU-Nummer eines bestehenden Datensatzes zu ändern, exportiere die Produkte
+              per CSV (Seite "Produkte → ↓ CSV exportieren"). Die Export-Datei enthält eine
+              Spalte <code>System-ID</code>. Korrigiere die SKU in der Tabelle und importiere
+              die Datei wieder. Das System erkennt die <code>System-ID</code> und sucht den
+              Datensatz damit — die neue SKU wird gesetzt.
+            </p>
+            <p className="text-purple-700 text-xs">
+              Tipp: Du musst nur die geänderten Zeilen importieren. Die System-ID kann auch für
+              Massenaktualisierungen (Kategorien, Marken, Preise) genutzt werden.
+            </p>
+          </div>
         </div>
       </div>
     </div>

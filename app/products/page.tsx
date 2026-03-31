@@ -11,6 +11,7 @@ import { computeDataQuality } from "@/lib/validation";
 interface Product {
   id: string;
   sku: string;
+  internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
   brand: string | null;
@@ -56,6 +57,7 @@ function ProductsPageInner() {
   const [data, setData] = useState<ProductsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const search = searchParams.get("search") ?? "";
   const category = searchParams.get("category") ?? "";
@@ -105,12 +107,51 @@ function ProductsPageInner() {
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Produkte</h1>
-        <Link
-          href="/import"
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-        >
-          + CSV importieren
-        </Link>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              if (exporting) return;
+              setExporting(true);
+              try {
+                // Pass current filters so the export matches what the user sees
+                const params = new URLSearchParams();
+                if (category) params.set("category", category);
+                if (status) params.set("status", status);
+                const res = await fetch(`/api/export?${params}`);
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1]
+                  ?? `compliancehub_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } finally {
+                setExporting(false);
+              }
+            }}
+            disabled={exporting}
+            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 disabled:opacity-60 transition-opacity"
+          >
+            {exporting ? (
+              <>
+                <svg className="w-4 h-4 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Exportiert…
+              </>
+            ) : (
+              "↓ CSV exportieren"
+            )}
+          </button>
+          <Link
+            href="/import"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            + CSV importieren
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -185,31 +226,15 @@ function ProductsPageInner() {
               <tr className="bg-gray-50 text-left">
                 <th className="px-4 py-2.5 font-medium text-gray-600">SKU</th>
                 <th className="px-4 py-2.5 font-medium text-gray-600">Name</th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Kategorie
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">Marke</th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  EK
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  Netto
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  Kunststoff
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600 text-right">
-                  Papier
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Konfidenz
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Status
-                </th>
-                <th className="px-4 py-2.5 font-medium text-gray-600">
-                  Qualität
-                </th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden md:table-cell">Kategorie</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden lg:table-cell">Marke</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden lg:table-cell">EK</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden xl:table-cell">Netto</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden sm:table-cell">Kunststoff</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden sm:table-cell">Papier</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden md:table-cell">Konfidenz</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600">Status</th>
+                <th className="px-4 py-2.5 font-medium text-gray-600 hidden lg:table-cell">Qualität</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -248,6 +273,11 @@ function ProductsPageInner() {
                         >
                           {product.sku}
                         </Link>
+                        {product.internalArticleNumber && (
+                          <div className="text-xs text-gray-400 font-mono">
+                            {product.internalArticleNumber}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 max-w-[200px]">
                         <Link
@@ -264,7 +294,7 @@ function ProductsPageInner() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
                         {product.category ?? "—"}
                         {product.subcategory && (
                           <span className="text-xs text-gray-400 block">
@@ -272,26 +302,26 @@ function ProductsPageInner() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
                         {product.brand ?? product.manufacturer ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden lg:table-cell">
                         {fmtEur(product.ekPrice)}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden xl:table-cell">
                         {fmt(product.netWeightG)}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden sm:table-cell">
                         {product.packagingProfile
                           ? fmt(product.packagingProfile.currentPlasticG)
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
+                      <td className="px-4 py-3 text-right font-mono text-xs hidden sm:table-cell">
                         {product.packagingProfile
                           ? fmt(product.packagingProfile.currentPaperG)
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 min-w-[100px]">
+                      <td className="px-4 py-3 min-w-[100px] hidden md:table-cell">
                         <ConfidenceBar
                           score={
                             product.packagingProfile?.confidenceScore ?? null
@@ -307,7 +337,7 @@ function ProductsPageInner() {
                           size="sm"
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 hidden lg:table-cell">
                         <DataQualityBadge score={quality.score} />
                       </td>
                     </tr>

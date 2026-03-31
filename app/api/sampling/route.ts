@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { updateProfileAfterSampling } from "@/lib/estimation";
+import { updateProfileAfterSampling, cascadeReestimateCategory } from "@/lib/estimation";
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,6 +57,11 @@ export async function POST(request: NextRequest) {
 
     // Update profile and run re-estimation
     await updateProfileAfterSampling(productId);
+
+    // Fire cascade in background — don't block response
+    if (product.category) {
+      cascadeReestimateCategory(product.category, productId).catch(console.error);
+    }
 
     return NextResponse.json(record, { status: 201 });
   } catch (error) {
