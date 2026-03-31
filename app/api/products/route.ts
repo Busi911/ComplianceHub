@@ -38,19 +38,32 @@ export async function GET(request: NextRequest) {
     }
 
     if (minSamples >= 2) {
-      // Post-filter: fetch up to 5000 matching, filter, paginate manually
-      const all = await prisma.product.findMany({
-        where,
+      // Prisma doesn't support relation _count in WHERE, so use a raw query to get IDs
+      // efficiently — avoids fetching thousands of rows just to filter in memory.
+      // Build the extra category condition for the raw query separately.
+      const rows = category
+        ? await prisma.$queryRaw<{ id: string }[]>`
+            SELECT p."id" FROM "Product" p
+            WHERE (SELECT COUNT(*) FROM "SamplingRecord" s WHERE s."productId" = p."id") >= ${minSamples}
+              AND lower(p."category") = lower(${category})
+            ORDER BY p."createdAt" DESC`
+        : await prisma.$queryRaw<{ id: string }[]>`
+            SELECT p."id" FROM "Product" p
+            WHERE (SELECT COUNT(*) FROM "SamplingRecord" s WHERE s."productId" = p."id") >= ${minSamples}
+            ORDER BY p."createdAt" DESC`;
+
+      const ids = rows.map((r) => r.id);
+      const total = ids.length;
+      const pagedIds = ids.slice((page - 1) * pageSize, page * pageSize);
+
+      const products = await prisma.product.findMany({
+        where: { id: { in: pagedIds } },
         include: {
           packagingProfile: true,
           _count: { select: { samplingRecords: true } },
         },
         orderBy: { createdAt: "desc" },
-        take: 5000,
       });
-      const filtered = all.filter((p) => p._count.samplingRecords >= minSamples);
-      const total = filtered.length;
-      const products = filtered.slice((page - 1) * pageSize, page * pageSize);
 
       const [categories, brands] = await Promise.all([
         prisma.product.findMany({
