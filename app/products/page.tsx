@@ -57,6 +57,7 @@ function ProductsPageInner() {
   const [data, setData] = useState<ProductsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const search = searchParams.get("search") ?? "";
   const category = searchParams.get("category") ?? "";
@@ -107,13 +108,43 @@ function ProductsPageInner() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Produkte</h1>
         <div className="flex gap-2">
-          <a
-            href="/api/export"
-            download
-            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          <button
+            onClick={async () => {
+              if (exporting) return;
+              setExporting(true);
+              try {
+                // Pass current filters so the export matches what the user sees
+                const params = new URLSearchParams();
+                if (category) params.set("category", category);
+                if (status) params.set("status", status);
+                const res = await fetch(`/api/export?${params}`);
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1]
+                  ?? `compliancehub_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } finally {
+                setExporting(false);
+              }
+            }}
+            disabled={exporting}
+            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 disabled:opacity-60 transition-opacity"
           >
-            ↓ CSV exportieren
-          </a>
+            {exporting ? (
+              <>
+                <svg className="w-4 h-4 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Exportiert…
+              </>
+            ) : (
+              "↓ CSV exportieren"
+            )}
+          </button>
           <Link
             href="/import"
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"

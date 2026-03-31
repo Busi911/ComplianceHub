@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     const products = await prisma.product.findMany({
       where,
       select: {
+        id: true,
         sku: true,
         internalArticleNumber: true,
         productName: true,
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
       "Brutto-Höhe (mm)",
       "Jahresabsatz (Stk.)",
       // Additional read-only columns (not imported back, informational)
+      "System-ID",
       "Status",
       "Kunststoff aktuell (g)",
       "Papier aktuell (g)",
@@ -107,6 +109,7 @@ export async function GET(request: NextRequest) {
           p.grossWidthMm,
           p.grossHeightMm,
           p.annualUnitsSold,
+          p.id,
           pp?.status ?? "",
           pp?.currentPlasticG,
           pp?.currentPaperG,

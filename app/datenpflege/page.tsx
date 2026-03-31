@@ -75,7 +75,7 @@ export default function DatepflegePage() {
 
         <div className="p-5 space-y-4">
           {/* Explanation */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900 space-y-1">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900 space-y-2">
             <p>
               <strong>Hintergrund:</strong> Das Feld <em>SKU</em> sollte die herstellerseitige oder
               handelsweit eindeutige Nummer enthalten (EAN, Hersteller-Art.-Nr.) — damit Verpackungsdaten
@@ -87,6 +87,27 @@ export default function DatepflegePage() {
             <p>
               Wenn ihr beim Import beide Felder mit derselben internen Nummer gefüllt habt,
               kann dieses Werkzeug die Werte in das richtige Feld übertragen.
+            </p>
+          </div>
+
+          {/* System-ID explanation */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1.5">
+            <div className="font-semibold text-gray-800 flex items-center gap-2">
+              <span>🔑</span> System-ID — die permanente Compliance-Kennung
+            </div>
+            <p>
+              Jeder Datensatz in ComplianceHub hat eine unveränderliche <strong>System-ID</strong> (z. B.{" "}
+              <code className="bg-gray-200 px-1 rounded text-xs">cm9abc123...</code>).
+              Sie ist vergleichbar mit einer <em>Steuernummer</em>: sie bleibt immer gleich, auch wenn
+              SKU oder interne Nummer sich ändern.
+            </p>
+            <p>
+              Wenn du die SKU leerst (Aktionen unten), wird die System-ID automatisch als neuer
+              SKU-Wert eingetragen — der Datensatz bleibt dadurch eindeutig identifizierbar
+              und importierbar.
+            </p>
+            <p className="text-gray-500 text-xs">
+              Die System-ID ist auf jeder Produktdetailseite sichtbar und wird im Export mitgeliefert.
             </p>
           </div>
 
@@ -192,11 +213,11 @@ export default function DatepflegePage() {
                       />
                       <div>
                         <div className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
-                          SKU leeren wo SKU = Interne Artikelnummer (exakte Duplikate)
+                          SKU durch System-ID ersetzen wo SKU = Interne Artikelnummer (exakte Duplikate)
                         </div>
                         <div className="text-xs text-gray-500">
                           Betrifft {analysis.duplicateExactCount} Produkte.
-                          Das SKU-Feld wird auf einen Platzhalter gesetzt, die interne Nummer bleibt.
+                          Interne Nummer bleibt unverändert, SKU wird zur permanenten System-ID.
                         </div>
                       </div>
                     </label>
@@ -212,11 +233,12 @@ export default function DatepflegePage() {
                       />
                       <div>
                         <div className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
-                          SKU → Interne Artikelnummer kopieren und SKU leeren
+                          SKU → Interne Artikelnummer kopieren und SKU durch System-ID ersetzen
                         </div>
                         <div className="text-xs text-gray-500">
                           Betrifft {analysis.skuOnlyCount} Produkte ohne interne Nummer.
-                          Das SKU-Feld wird danach freigemacht für die echte Lieferanten-Nummer.
+                          Die interne Nummer erhält euren bisherigen Wert, die SKU wird zur
+                          permanenten System-ID — bereit für die echte EAN wenn ihr sie habt.
                         </div>
                       </div>
                     </label>

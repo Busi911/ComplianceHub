@@ -44,6 +44,7 @@ export default function CompliancePage() {
   const [data, setData] = useState<ComplianceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetch("/api/compliance")
@@ -57,7 +58,8 @@ export default function CompliancePage() {
   }, []);
 
   function downloadCSV() {
-    if (!data) return;
+    if (!data || exporting) return;
+    setExporting(true);
     const bom = "\uFEFF";
     const headers = [
       "Kategorie",
@@ -87,6 +89,7 @@ export default function CompliancePage() {
     a.download = `compliance_${data.reportYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setTimeout(() => setExporting(false), 800);
   }
 
   if (loading) {
@@ -145,9 +148,20 @@ export default function CompliancePage() {
         </div>
         <button
           onClick={downloadCSV}
-          className="flex-shrink-0 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2"
+          disabled={exporting}
+          className="flex-shrink-0 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 disabled:opacity-60 transition-opacity"
         >
-          ↓ CSV-Export
+          {exporting ? (
+            <>
+              <svg className="w-4 h-4 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Exportiert…
+            </>
+          ) : (
+            <>↓ CSV-Export</>
+          )}
         </button>
       </div>
 

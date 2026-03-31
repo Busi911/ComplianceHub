@@ -333,7 +333,7 @@ export default function ProductDetailPage() {
         <div>
           <Link href="/products" className="text-sm text-gray-500 hover:text-gray-700">← Produkte</Link>
           <h1 className="text-xl font-bold text-gray-900 mt-1">{product.productName}</h1>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="font-mono text-sm text-gray-500">{product.sku}</span>
             {product.packagingProfile && <StatusBadge status={product.packagingProfile.status} />}
             {saveSuccess && <span className="text-xs text-green-600">✓ Gespeichert</span>}
@@ -439,6 +439,14 @@ export default function ProductDetailPage() {
             <Field label="Unterkategorie" value={product.subcategory} />
             <Field label="EK-Preis" value={product.ekPrice != null ? `${product.ekPrice.toFixed(2)} €` : null} mono />
             <Field label="Quelle" value={product.source} />
+            <div className="col-span-2 pt-1 border-t border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">System-ID</span>
+                <span className="font-mono text-xs text-gray-400 select-all" title="Permanente interne Kennung — ändert sich nie">
+                  {product.id}
+                </span>
+              </div>
+            </div>
           </dl>
         </div>
 

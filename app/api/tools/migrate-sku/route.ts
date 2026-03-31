@@ -90,7 +90,9 @@ export async function POST(request: NextRequest) {
           where: { id: p.id },
           data: {
             internalArticleNumber: p.sku,
-            ...(action === "copy_and_clear" ? { sku: `__cleared_${p.id.slice(0, 8)}` } : {}),
+            // When clearing the SKU, use the product's permanent system ID (CUID)
+            // as the new SKU — it's unique, stable, and serves as the compliance ID.
+            ...(action === "copy_and_clear" ? { sku: p.id } : {}),
           },
         });
         affected++;
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "clear_duplicate") {
-      // Clear sku where sku == internalArticleNumber
+      // Clear sku where sku == internalArticleNumber — replace with system ID
       const dupes = await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "Product"
         WHERE sku IS NOT NULL AND sku <> ''
@@ -108,7 +110,8 @@ export async function POST(request: NextRequest) {
       for (const { id } of dupes) {
         await prisma.product.update({
           where: { id },
-          data: { sku: `__cleared_${id.slice(0, 8)}` },
+          // Use the product's permanent system ID (CUID) as the new SKU
+          data: { sku: id },
         });
         affected++;
       }
