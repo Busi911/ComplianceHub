@@ -54,6 +54,18 @@ export async function estimatePackaging(
     };
   }
 
+  // ── Tier 1.5: Manufacturer-provided packaging data (mfrPlasticG / mfrPaperG) ─
+  // Direct Hersteller-Angaben are more reliable than similarity estimates.
+  if (product.mfrPlasticG != null || product.mfrPaperG != null) {
+    return {
+      plasticG: product.mfrPlasticG ?? null,
+      paperG: product.mfrPaperG ?? null,
+      confidenceScore: 0.80,
+      method: "manufacturer_data",
+      basedOnProductIds: [productId],
+    };
+  }
+
   // ── Tier 2: Similar products with sampling data ───────────────────────────
   const similarProducts = await findSimilarProductsWithSampling(product);
 
