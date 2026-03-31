@@ -489,6 +489,27 @@ export async function POST(request: NextRequest) {
             update: {},
           });
 
+          // Hersteller-Puffer: apply any pre-loaded manufacturer data for this EAN.
+          // Fire-and-forget — buffer matching must never block or fail an import row.
+          prisma.manufacturerDataBuffer.findFirst({
+            where: { ean: productFields.ean, matchedProductId: null },
+          }).then(async (bufferEntry) => {
+            if (!bufferEntry) return;
+            await prisma.product.update({
+              where: { id: product.id },
+              data: {
+                ...(bufferEntry.mfrNetWeightG !== null ? { mfrNetWeightG: bufferEntry.mfrNetWeightG } : {}),
+                ...(bufferEntry.mfrGrossWeightG !== null ? { mfrGrossWeightG: bufferEntry.mfrGrossWeightG } : {}),
+                ...(bufferEntry.mfrPlasticG !== null ? { mfrPlasticG: bufferEntry.mfrPlasticG } : {}),
+                ...(bufferEntry.mfrPaperG !== null ? { mfrPaperG: bufferEntry.mfrPaperG } : {}),
+              },
+            });
+            await prisma.manufacturerDataBuffer.update({
+              where: { id: bufferEntry.id },
+              data: { matchedProductId: product.id, matchedAt: new Date() },
+            });
+          }).catch(console.error);
+
           // Estimation: fire-and-forget — don't block the response.
           // Runs in background; errors are logged but don't fail the import row.
           updateProfileAfterSampling(product.id).catch(console.error);

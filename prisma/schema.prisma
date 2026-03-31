@@ -46,6 +46,7 @@ model Product {
   estimateHistory  ProductEstimateHistory[]
   auditLogs        AuditLog[]               @relation("ProductAuditLogs")
   manufacturerRequestItems ManufacturerRequestItem[]
+  manufacturerBufferMatches ManufacturerDataBuffer[]
 
   @@index([category])
   @@index([brand])
@@ -176,6 +177,31 @@ model ManufacturerRequestItem {
   @@unique([requestId, productId])
   @@index([requestId])
   @@index([productId])
+}
+
+// Hersteller senden ihre Artikeldaten vorab mit EAN.
+// Solange der Artikel noch nicht im Sortiment ist, liegen die Daten im Puffer.
+// Sobald ein Produkt mit passender EAN importiert wird, werden die Herstellerdaten automatisch übernommen.
+model ManufacturerDataBuffer {
+  id               String    @id @default(cuid())
+  ean              String
+  manufacturerName String?
+  productName      String?
+  mfrNetWeightG    Float?
+  mfrGrossWeightG  Float?
+  mfrPlasticG      Float?
+  mfrPaperG        Float?
+  extraJson        String?   // alle weiteren CSV-Spalten als JSON
+  sourceFileName   String?
+  matchedProductId String?
+  matchedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  matchedProduct   Product?  @relation(fields: [matchedProductId], references: [id])
+
+  @@index([ean])
+  @@index([matchedProductId])
 }
 
 model SamplingPreset {
