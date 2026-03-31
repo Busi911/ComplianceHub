@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category") ?? "";
     const status = searchParams.get("status") ?? "";
+    // mode=slim → only import-relevant columns (no packaging profile)
+    // mode=full → all columns including estimation data (default)
+    const mode = searchParams.get("mode") ?? "full";
 
     const where: Record<string, unknown> = {};
     if (category) where.category = { equals: category, mode: "insensitive" };
@@ -46,52 +49,115 @@ export async function GET(request: NextRequest) {
         grossHeightMm: true,
         annualUnitsSold: true,
         source: true,
-        packagingProfile: true,
-        _count: { select: { samplingRecords: true } },
+        // Only select the specific profile fields used in the CSV (not the entire model)
+        ...(mode !== "slim" && {
+          packagingProfile: {
+            select: {
+              status: true,
+              currentPlasticG: true,
+              currentPaperG: true,
+              estimatedPlasticG: true,
+              estimatedPaperG: true,
+              measuredPlasticG: true,
+              measuredPaperG: true,
+              confidenceScore: true,
+              estimationMethod: true,
+            },
+          },
+          _count: { select: { samplingRecords: true } },
+        }),
       },
       orderBy: [{ category: "asc" }, { productName: "asc" }],
     });
 
-    const headers = [
-      "SKU",
-      "Interne Art.-Nr.",
-      "Produktname",
-      "Hersteller",
-      "Marke",
-      "Kategorie",
-      "Unterkategorie",
-      "EK-Preis (EUR)",
-      // Use the same names as the import template so export → re-import round-trips correctly
-      "Netto-Gewicht (g)",
-      "Brutto-Gewicht (g)",
-      "Netto-Länge (mm)",
-      "Netto-Breite (mm)",
-      "Netto-Höhe (mm)",
-      "Brutto-Länge (mm)",
-      "Brutto-Breite (mm)",
-      "Brutto-Höhe (mm)",
-      "Jahresabsatz (Stk.)",
-      // Additional read-only columns (not imported back, informational)
-      "System-ID",
-      "Status",
-      "Kunststoff aktuell (g)",
-      "Papier aktuell (g)",
-      "Kunststoff geschätzt (g)",
-      "Papier geschätzt (g)",
-      "Kunststoff gemessen (g)",
-      "Papier gemessen (g)",
-      "Konfidenz (%)",
-      "Schätzmethode",
-      "Anzahl Stichproben",
-      "Quelle",
-    ];
+    const bom = "\uFEFF";
+    let csv: string;
 
-    const lines: string[] = [row(headers)];
-
-    for (const p of products) {
-      const pp = p.packagingProfile;
-      lines.push(
-        row([
+    if (mode === "slim") {
+      // Compact export: only the 17 import-relevant columns
+      // Ideal for bulk corrections — smaller file, faster to open in Excel
+      const headers = [
+        "SKU",
+        "Interne Art.-Nr.",
+        "Produktname",
+        "Hersteller",
+        "Marke",
+        "Kategorie",
+        "Unterkategorie",
+        "EK-Preis (EUR)",
+        "Netto-Gewicht (g)",
+        "Brutto-Gewicht (g)",
+        "Netto-Länge (mm)",
+        "Netto-Breite (mm)",
+        "Netto-Höhe (mm)",
+        "Brutto-Länge (mm)",
+        "Brutto-Breite (mm)",
+        "Brutto-Höhe (mm)",
+        "Jahresabsatz (Stk.)",
+        "System-ID",
+      ];
+      const lines = [row(headers)];
+      for (const p of products) {
+        lines.push(row([
+          p.sku,
+          p.internalArticleNumber,
+          p.productName,
+          p.manufacturer,
+          p.brand,
+          p.category,
+          p.subcategory,
+          p.ekPrice,
+          p.netWeightG,
+          p.grossWeightG,
+          p.netLengthMm,
+          p.netWidthMm,
+          p.netHeightMm,
+          p.grossLengthMm,
+          p.grossWidthMm,
+          p.grossHeightMm,
+          p.annualUnitsSold,
+          p.id,
+        ]));
+      }
+      csv = bom + lines.join("\r\n");
+    } else {
+      // Full export: all columns including packaging/estimation data
+      const headers = [
+        "SKU",
+        "Interne Art.-Nr.",
+        "Produktname",
+        "Hersteller",
+        "Marke",
+        "Kategorie",
+        "Unterkategorie",
+        "EK-Preis (EUR)",
+        "Netto-Gewicht (g)",
+        "Brutto-Gewicht (g)",
+        "Netto-Länge (mm)",
+        "Netto-Breite (mm)",
+        "Netto-Höhe (mm)",
+        "Brutto-Länge (mm)",
+        "Brutto-Breite (mm)",
+        "Brutto-Höhe (mm)",
+        "Jahresabsatz (Stk.)",
+        "System-ID",
+        "Status",
+        "Kunststoff aktuell (g)",
+        "Papier aktuell (g)",
+        "Kunststoff geschätzt (g)",
+        "Papier geschätzt (g)",
+        "Kunststoff gemessen (g)",
+        "Papier gemessen (g)",
+        "Konfidenz (%)",
+        "Schätzmethode",
+        "Anzahl Stichproben",
+        "Quelle",
+      ];
+      const lines = [row(headers)];
+      for (const p of products) {
+        const pp = (p as typeof p & { packagingProfile?: { status: string; currentPlasticG: number | null; currentPaperG: number | null; estimatedPlasticG: number | null; estimatedPaperG: number | null; measuredPlasticG: number | null; measuredPaperG: number | null; confidenceScore: number | null; estimationMethod: string | null } | null }).packagingProfile;
+        const count = (p as typeof p & { _count?: { samplingRecords: number } })._count;
+        lines.push(row([
           p.sku,
           p.internalArticleNumber,
           p.productName,
@@ -119,20 +185,22 @@ export async function GET(request: NextRequest) {
           pp?.measuredPaperG,
           pp?.confidenceScore != null ? Math.round(pp.confidenceScore * 100) : "",
           pp?.estimationMethod,
-          p._count.samplingRecords,
+          count?.samplingRecords,
           p.source,
-        ])
-      );
+        ]));
+      }
+      csv = bom + lines.join("\r\n");
     }
 
-    // UTF-8 BOM so Excel opens it correctly with umlauts
-    const bom = "\uFEFF";
-    const csv = bom + lines.join("\r\n");
+    const filename = mode === "slim"
+      ? `compliancehub_stammdaten_${new Date().toISOString().slice(0, 10)}.csv`
+      : `compliancehub_export_${new Date().toISOString().slice(0, 10)}.csv`;
 
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="compliancehub_export_${new Date().toISOString().slice(0, 10)}.csv"`,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "X-Row-Count": String(products.length),
       },
     });
   } catch (error) {
