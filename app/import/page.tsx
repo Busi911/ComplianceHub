@@ -112,8 +112,15 @@ export default function ImportPage() {
         body: formData,
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      let data: Record<string, unknown>;
+      try {
+        data = await res.json();
+      } catch {
+        // Server returned non-JSON (e.g. 413 Request Entity Too Large)
+        if (res.status === 413) throw new Error("Datei zu groß — maximale Größe: 50 MB");
+        throw new Error(`Server-Fehler ${res.status}`);
+      }
+      if (!res.ok) throw new Error(data.error as string);
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");
