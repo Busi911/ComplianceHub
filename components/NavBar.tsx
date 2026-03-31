@@ -14,7 +14,6 @@ const NAV_ITEMS = [
   { href: "/compliance", label: "Compliance", exact: false },
   { href: "/estimation-rules", label: "Schätzlogik", exact: false },
   { href: "/datenpflege", label: "Datenpflege", exact: false },
-  { href: "/manufacturer-requests", label: "Herstelleranfragen", exact: false },
   { href: "/manufacturer-buffer", label: "Hersteller-Puffer", exact: false },
 ];
 

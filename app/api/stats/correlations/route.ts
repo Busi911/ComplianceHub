@@ -12,7 +12,17 @@ export interface CategoryCorrelation {
     ekPriceVsPlastic: number | null;
     volumeVsPlastic: number | null;
     grossWeightVsPaper: number | null;
+    netWeightVsPaper: number | null;
+    ekPriceVsPaper: number | null;
+    volumeVsPaper: number | null;
   };
+  regressionPaper: {
+    a: number;
+    b: number;
+    r2: number;
+    usable: boolean;
+  } | null;
+  cvPaper: number | null;
   regressionPlastic: {
     a: number;
     b: number;
@@ -136,6 +146,9 @@ export async function GET() {
       const epPair = cleanPair(data.ekPrices, data.plasticMeans);
       const volPair = cleanPair(data.volumes, data.plasticMeans);
       const paperPair = cleanPair(data.grossWeights, data.paperMeans);
+      const nwPaperPair = cleanPair(data.netWeights, data.paperMeans);
+      const epPaperPair = cleanPair(data.ekPrices, data.paperMeans);
+      const volPaperPair = cleanPair(data.volumes, data.paperMeans);
 
       const regressionInput = gwPair.xs.length >= 5
         ? linearRegression(gwPair.xs, gwPair.ys)
@@ -149,6 +162,19 @@ export async function GET() {
               return m > 0 ? Math.round((sd / m) * 1000) / 10 : null;
             })()
           : null;
+
+      const cvPaper =
+        data.paperMeans.length >= 3
+          ? (() => {
+              const m = mean(data.paperMeans);
+              const sd = stdDev(data.paperMeans, m);
+              return m > 0 ? Math.round((sd / m) * 1000) / 10 : null;
+            })()
+          : null;
+
+      const regressionPaperInput = paperPair.xs.length >= 5
+        ? linearRegression(paperPair.xs, paperPair.ys)
+        : null;
 
       // Re-run outlier detection on the per-category plastic distribution
       const catOutlierResults = n >= 3 ? detectOutliers(data.plasticMeans) : null;
@@ -166,6 +192,9 @@ export async function GET() {
           ekPriceVsPlastic: pearsonR(epPair.xs, epPair.ys),
           volumeVsPlastic: pearsonR(volPair.xs, volPair.ys),
           grossWeightVsPaper: pearsonR(paperPair.xs, paperPair.ys),
+          netWeightVsPaper: pearsonR(nwPaperPair.xs, nwPaperPair.ys),
+          ekPriceVsPaper: pearsonR(epPaperPair.xs, epPaperPair.ys),
+          volumeVsPaper: pearsonR(volPaperPair.xs, volPaperPair.ys),
         },
         regressionPlastic: regressionInput
           ? {
@@ -173,7 +202,14 @@ export async function GET() {
               usable: regressionInput.r2 >= 0.4 && gwPair.xs.length >= 5,
             }
           : null,
+        regressionPaper: regressionPaperInput
+          ? {
+              ...regressionPaperInput,
+              usable: regressionPaperInput.r2 >= 0.4 && paperPair.xs.length >= 5,
+            }
+          : null,
         cvPlastic,
+        cvPaper,
       });
     }
 

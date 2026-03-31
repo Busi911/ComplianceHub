@@ -13,6 +13,9 @@ export async function GET() {
         productName: true,
         category: true,
         annualUnitsSold: true,
+        grossLengthMm: true,
+        grossWidthMm: true,
+        grossHeightMm: true,
         packagingProfile: {
           select: {
             currentPlasticG: true,
@@ -72,6 +75,8 @@ export async function GET() {
         annualPlasticKg: number;
         annualPaperKg: number;
         readyCount: number;
+        volumeCm3Total: number;
+        volumeCount: number;
       }
     >();
 
@@ -86,6 +91,8 @@ export async function GET() {
         annualPlasticKg: 0,
         annualPaperKg: 0,
         readyCount: 0,
+        volumeCm3Total: 0,
+        volumeCount: 0,
       };
 
       existing.productCount += 1;
@@ -114,6 +121,12 @@ export async function GET() {
         }
       }
 
+      if (p.grossLengthMm && p.grossWidthMm && p.grossHeightMm) {
+        // mm³ → cm³: divide by 1000
+        existing.volumeCm3Total += (p.grossLengthMm * p.grossWidthMm * p.grossHeightMm) / 1000;
+        existing.volumeCount += 1;
+      }
+
       categoryMap.set(cat, existing);
     }
 
@@ -132,6 +145,9 @@ export async function GET() {
         annualPlasticKg: Math.round(data.annualPlasticKg * 100) / 100,
         annualPaperKg: Math.round(data.annualPaperKg * 100) / 100,
         readyCount: data.readyCount,
+        avgVolumeCm3: data.volumeCount > 0
+          ? Math.round(data.volumeCm3Total / data.volumeCount)
+          : null,
       }))
       .sort((a, b) => b.annualPlasticKg + b.annualPaperKg - (a.annualPlasticKg + a.annualPaperKg));
 

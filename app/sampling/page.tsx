@@ -99,6 +99,12 @@ function SamplingPriorityInner() {
   const [presetName, setPresetName] = useState("");
   const [showPresetInput, setShowPresetInput] = useState(false);
   const [presetSaved, setPresetSaved] = useState(false);
+  // Wiegeliste: Produkte die per "Wiegen"-Knopf zur Vorlage hinzugefügt werden
+  const [wiegeliste, setWiegeliste] = useState<PriorityProduct[]>([]);
+  const [showWiegelistePreset, setShowWiegelistePreset] = useState(false);
+  const [wiegelisteName, setWiegelisteName] = useState("");
+  const [savingWiegeliste, setSavingWiegeliste] = useState(false);
+  const [wiegelisteSaved, setWiegelisteSaved] = useState(false);
 
   function fetchList() {
     setLoading(true);
@@ -169,6 +175,35 @@ function SamplingPriorityInner() {
       }
     } finally {
       setSavingPreset(false);
+    }
+  }
+
+  function toggleWiegeliste(product: PriorityProduct) {
+    setWiegeliste((prev) =>
+      prev.some((p) => p.id === product.id)
+        ? prev.filter((p) => p.id !== product.id)
+        : [...prev, product]
+    );
+  }
+
+  async function saveWiegeliste() {
+    if (!wiegelisteName.trim() || wiegeliste.length === 0) return;
+    setSavingWiegeliste(true);
+    try {
+      const res = await fetch("/api/sampling/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: wiegelisteName.trim(), productIds: wiegeliste.map((p) => p.id) }),
+      });
+      if (res.ok) {
+        setWiegelisteSaved(true);
+        setShowWiegelistePreset(false);
+        setWiegelisteName("");
+        setWiegeliste([]);
+        setTimeout(() => setWiegelisteSaved(false), 3000);
+      }
+    } finally {
+      setSavingWiegeliste(false);
     }
   }
 
@@ -417,11 +452,22 @@ function SamplingPriorityInner() {
                       />
                     ) : (
                       <div className="flex gap-1.5 flex-wrap">
+                        <button
+                          onClick={() => toggleWiegeliste(p)}
+                          className={`text-xs px-2 py-1 rounded whitespace-nowrap transition-colors ${
+                            wiegeliste.some((w) => w.id === p.id)
+                              ? "bg-green-600 text-white hover:bg-green-700"
+                              : "bg-green-100 text-green-700 hover:bg-green-200"
+                          }`}
+                          title={wiegeliste.some((w) => w.id === p.id) ? "Aus Wiegeliste entfernen" : "Zur Wiegeliste hinzufügen"}
+                        >
+                          {wiegeliste.some((w) => w.id === p.id) ? "✓ Liste" : "+ Liste"}
+                        </button>
                         <Link
                           href={`/products/${p.id}#sampling`}
-                          className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 whitespace-nowrap"
+                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 whitespace-nowrap"
                         >
-                          + Wiegen
+                          Wiegen →
                         </Link>
                         <button
                           onClick={() => setSkippingId(p.id)}
@@ -448,6 +494,63 @@ function SamplingPriorityInner() {
           </tbody>
         </table>
       </div>
+
+      {/* Sticky Wiegeliste-Bar */}
+      {wiegeliste.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-50">
+          <div className="bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <span className="font-semibold text-sm">
+                  {wiegeliste.length} Produkt{wiegeliste.length !== 1 ? "e" : ""} in der Wiegeliste
+                </span>
+                <p className="text-xs text-gray-400 mt-0.5 truncate">
+                  {wiegeliste.map((p) => p.productName).join(", ")}
+                </p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowWiegelistePreset((v) => !v)}
+                  className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-400 font-medium"
+                >
+                  Als Vorlage speichern
+                </button>
+                <button
+                  onClick={() => setWiegeliste([])}
+                  className="text-xs text-gray-400 hover:text-white px-2 py-1.5"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            {showWiegelistePreset && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); saveWiegeliste(); }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={wiegelisteName}
+                  onChange={(e) => setWiegelisteName(e.target.value)}
+                  placeholder="Name der Vorlage …"
+                  autoFocus
+                  className="flex-1 bg-gray-800 text-white border border-gray-600 rounded px-3 py-1.5 text-sm outline-none focus:border-green-400 placeholder-gray-500"
+                />
+                <button
+                  type="submit"
+                  disabled={savingWiegeliste || !wiegelisteName.trim()}
+                  className="text-sm bg-green-500 text-white px-4 py-1.5 rounded hover:bg-green-400 disabled:opacity-50 font-medium"
+                >
+                  {savingWiegeliste ? "…" : "Speichern"}
+                </button>
+              </form>
+            )}
+            {wiegelisteSaved && (
+              <p className="text-xs text-green-400">Vorlage gespeichert — ladbar über Wiegesession → Tab "Vorlage laden"</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

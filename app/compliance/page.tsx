@@ -11,6 +11,7 @@ interface CategoryRow {
   annualPlasticKg: number;
   annualPaperKg: number;
   readyCount: number;
+  avgVolumeCm3: number | null;
 }
 
 interface MissingRow {
@@ -256,6 +257,7 @@ export default function CompliancePage() {
                   <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden sm:table-cell">Produkte</th>
                   <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden md:table-cell">Ø Kunststoff/Stk (g)</th>
                   <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden md:table-cell">Ø Papier/Stk (g)</th>
+                  <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden lg:table-cell">Ø Volumen (cm³)</th>
                   <th className="px-4 py-2.5 font-medium text-blue-700 text-right">Kunststoff/Jahr (kg)</th>
                   <th className="px-4 py-2.5 font-medium text-green-700 text-right">Papier/Jahr (kg)</th>
                   <th className="px-4 py-2.5 font-medium text-gray-600 text-right hidden lg:table-cell">Vollständig</th>
@@ -275,6 +277,9 @@ export default function CompliancePage() {
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-gray-600 hidden md:table-cell">
                       {row.avgPaperG != null ? fmt(row.avgPaperG) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-gray-600 hidden lg:table-cell">
+                      {row.avgVolumeCm3 != null ? row.avgVolumeCm3.toLocaleString("de-DE") : "—"}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs font-semibold text-blue-700">
                       {row.annualPlasticKg > 0 ? fmt(row.annualPlasticKg, 2) : "—"}
@@ -303,6 +308,7 @@ export default function CompliancePage() {
                   </td>
                   <td className="hidden md:table-cell" />
                   <td className="hidden md:table-cell" />
+                  <td className="hidden lg:table-cell" />
                   <td className="px-4 py-3 text-right font-mono text-sm text-blue-800">
                     {data.totalPlasticKg.toFixed(2)} kg
                   </td>
