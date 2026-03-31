@@ -284,6 +284,22 @@ export default function ProductDetailPage() {
     }
   }
 
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+
+  async function deleteSamplingRecord(recordId: string) {
+    if (!confirm("Stichprobe löschen? Die Schätzung wird danach neu berechnet.")) return;
+    setDeletingRecordId(recordId);
+    try {
+      const res = await fetch(`/api/sampling/${recordId}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error("Fehler beim Löschen");
+      loadProduct();
+    } catch (err) {
+      alert("Fehler: " + (err instanceof Error ? err.message : "Unbekannt"));
+    } finally {
+      setDeletingRecordId(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -548,9 +564,9 @@ export default function ProductDetailPage() {
           <form onSubmit={submitSampling} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <InputField label="Erfasst von" name="sampledBy" value={samplingForm.sampledBy} onChange={(e) => setSamplingForm((f) => ({ ...f, sampledBy: e.target.value }))} placeholder="Name" />
+              <InputField label="PPK – Papier/Pappe (g)" name="measuredPaperG" value={samplingForm.measuredPaperG} onChange={(e) => setSamplingForm((f) => ({ ...f, measuredPaperG: e.target.value }))} type="number" placeholder="z. B. 120.0" />
               <InputField label="Kunststoff gemessen (g)" name="measuredPlasticG" value={samplingForm.measuredPlasticG} onChange={(e) => setSamplingForm((f) => ({ ...f, measuredPlasticG: e.target.value }))} type="number" placeholder="z. B. 45.5" />
-              <InputField label="Papier/Pappe gemessen (g)" name="measuredPaperG" value={samplingForm.measuredPaperG} onChange={(e) => setSamplingForm((f) => ({ ...f, measuredPaperG: e.target.value }))} type="number" placeholder="z. B. 120.0" />
-              <InputField label="Verpackung gesamt (g)" name="measuredTotalPackagingG" value={samplingForm.measuredTotalPackagingG} onChange={(e) => setSamplingForm((f) => ({ ...f, measuredTotalPackagingG: e.target.value }))} type="number" placeholder="optional" />
+              <InputField label="Verpackung gesamt (g)" name="measuredTotalPackagingG" value={samplingForm.measuredTotalPackagingG} onChange={(e) => setSamplingForm((f) => ({ ...f, measuredTotalPackagingG: e.target.value }))} type="number" placeholder="auto (PPK + Kunststoff)" />
               <InputField label="Nettogewicht bei Wiegung (g)" name="netWeightAtSamplingG" value={samplingForm.netWeightAtSamplingG} onChange={(e) => setSamplingForm((f) => ({ ...f, netWeightAtSamplingG: e.target.value }))} type="number" placeholder="optional" />
               <InputField label="Bruttogewicht bei Wiegung (g)" name="grossWeightAtSamplingG" value={samplingForm.grossWeightAtSamplingG} onChange={(e) => setSamplingForm((f) => ({ ...f, grossWeightAtSamplingG: e.target.value }))} type="number" placeholder="optional" />
             </div>
@@ -585,11 +601,12 @@ export default function ProductDetailPage() {
                 <tr className="bg-gray-50 text-left">
                   <th className="px-4 py-2 font-medium text-gray-600">Datum</th>
                   <th className="px-4 py-2 font-medium text-gray-600">Von</th>
+                  <th className="px-4 py-2 font-medium text-gray-600 text-right">PPK</th>
                   <th className="px-4 py-2 font-medium text-gray-600 text-right">Kunststoff</th>
-                  <th className="px-4 py-2 font-medium text-gray-600 text-right">Papier</th>
                   <th className="px-4 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Gesamt</th>
                   <th className="px-4 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Bruttogewicht</th>
                   <th className="px-4 py-2 font-medium text-gray-600">Notizen</th>
+                  <th className="px-4 py-2 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -597,6 +614,13 @@ export default function ProductDetailPage() {
                   <tr key={r.id} className={r.isOutlier ? "bg-orange-50" : ""}>
                     <td className="px-4 py-2 text-xs font-mono">{fmtDate(r.sampledAt)}</td>
                     <td className="px-4 py-2 text-gray-600">{r.sampledBy ?? "—"}</td>
+                    {/* PPK first */}
+                    <td className="px-4 py-2 text-right font-mono text-xs">
+                      <span className={r.isOutlier ? "line-through text-orange-400" : ""}>
+                        {fmt(r.measuredPaperG)}
+                      </span>
+                    </td>
+                    {/* Kunststoff second */}
                     <td className="px-4 py-2 text-right font-mono text-xs">
                       <span className={r.isOutlier ? "line-through text-orange-400" : ""}>
                         {fmt(r.measuredPlasticG)}
@@ -610,11 +634,6 @@ export default function ProductDetailPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-right font-mono text-xs">
-                      <span className={r.isOutlier ? "line-through text-orange-400" : ""}>
-                        {fmt(r.measuredPaperG)}
-                      </span>
-                    </td>
                     <td className="px-4 py-2 text-right font-mono text-xs hidden md:table-cell">{fmt(r.measuredTotalPackagingG)}</td>
                     <td className="px-4 py-2 text-right font-mono text-xs hidden md:table-cell">{fmt(r.grossWeightAtSamplingG)}</td>
                     <td className="px-4 py-2 text-xs text-gray-500">
@@ -622,6 +641,16 @@ export default function ProductDetailPage() {
                         <span className="block text-orange-500 mb-0.5">{r.outlierReason}</span>
                       )}
                       {r.notes ?? "—"}
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        onClick={() => deleteSamplingRecord(r.id)}
+                        disabled={deletingRecordId === r.id}
+                        title="Stichprobe löschen"
+                        className="text-gray-300 hover:text-red-500 disabled:opacity-40 text-sm leading-none"
+                      >
+                        {deletingRecordId === r.id ? "…" : "✕"}
+                      </button>
                     </td>
                   </tr>
                 ))}

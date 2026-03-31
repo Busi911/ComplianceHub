@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
     const FIELD_LABELS: Record<string, string> = {
       _systemId: "System-ID 🔑",
       sku: "SKU",
-      internalArticleNumber: "Interne Art.-Nr.",
+      internalArticleNumber: "Interne Art.-Nr. 🔑",
       productName: "Produktname",
       manufacturer: "Hersteller",
       brand: "Marke",
@@ -335,17 +335,50 @@ export async function POST(request: NextRequest) {
 
     type RowResult = (typeof results)[0];
 
+    // Numeric fields that should NOT overwrite existing DB values when the CSV cell is empty.
+    // If a column is absent from the CSV, mapped[field] is undefined → Prisma skips it (correct).
+    // If a column IS present but empty, mapped[field] = null → would overwrite existing value (BUG).
+    // Fix: for UPDATE, strip null values for these sparse numeric fields.
+    const SPARSE_NUMERIC_FIELDS = new Set([
+      "netWeightG", "grossWeightG",
+      "netLengthMm", "netWidthMm", "netHeightMm",
+      "grossLengthMm", "grossWidthMm", "grossHeightMm",
+      "ekPrice", "annualUnitsSold",
+    ]);
+
+    function buildUpdateFields(base: Record<string, unknown>): Record<string, unknown> {
+      return Object.fromEntries(
+        Object.entries(base).filter(([k, v]) =>
+          !(SPARSE_NUMERIC_FIELDS.has(k) && (v === null || v === undefined))
+        )
+      );
+    }
+
     async function processRow(rawRow: Record<string, string>, rowNum: number): Promise<RowResult> {
       const mapped = mapRow(rawRow);
-      const validation = validateProductInput(mapped as Parameters<typeof validateProductInput>[0]);
+      const systemId = mapped._systemId as string | null;
+      const internalArticleNumber = (mapped.internalArticleNumber as string) || null;
 
-      if (!validation.isValid) {
+      // SKU is required UNLESS a System-ID or internalArticleNumber is provided for lookup.
+      // In those cases, the existing record's SKU is used if not supplied in the CSV.
+      const hasLookupKey = !!(systemId || internalArticleNumber);
+      const validationInput = hasLookupKey
+        ? { ...mapped, sku: (mapped.sku as string) || "_lookup_" } // satisfy validator temporarily
+        : mapped;
+      const validation = validateProductInput(validationInput as Parameters<typeof validateProductInput>[0]);
+
+      // Re-check: if sku error and we have a lookup key, clear that specific error
+      const errors = hasLookupKey
+        ? validation.errors.filter((e) => !e.includes("SKU"))
+        : validation.errors;
+
+      if (errors.length > 0) {
         errorCount++;
         return {
           row: rowNum,
           sku: (mapped.sku as string) ?? null,
           status: "error",
-          errors: validation.errors,
+          errors,
           warnings: validation.warnings,
           data: mapped,
         };
@@ -353,11 +386,9 @@ export async function POST(request: NextRequest) {
 
       if (!dryRun && batch) {
         try {
-          const systemId = mapped._systemId as string | null;
-
           const productFields = {
             sku: mapped.sku as string,
-            internalArticleNumber: (mapped.internalArticleNumber as string) || null,
+            internalArticleNumber: internalArticleNumber,
             productName: (mapped.productName as string) || "",
             manufacturer: (mapped.manufacturer as string) || null,
             brand: (mapped.brand as string) || null,
@@ -383,23 +414,71 @@ export async function POST(request: NextRequest) {
             // ── System-ID path: look up by permanent ID, allow SKU to change ──
             const existing = await prisma.product.findUnique({ where: { id: systemId } });
             if (existing) {
+              // Use existing SKU if not provided in CSV
+              const updateData = buildUpdateFields({
+                ...productFields,
+                sku: productFields.sku || existing.sku,
+                importBatchId: existing.importBatchId ?? batch.id,
+              });
+              product = await prisma.product.update({ where: { id: systemId }, data: updateData });
+            } else {
+              // System-ID not found — fall through to SKU-based upsert
+              const ex2 = productFields.sku
+                ? await prisma.product.findUnique({ where: { sku: productFields.sku } })
+                : null;
+              if (ex2) {
+                product = await prisma.product.update({
+                  where: { id: ex2.id },
+                  data: { ...buildUpdateFields(productFields), importBatchId: ex2.importBatchId ?? batch.id },
+                });
+              } else if (productFields.sku) {
+                product = await prisma.product.create({
+                  data: { ...productFields, importBatchId: batch.id },
+                });
+                isNew = true;
+              } else {
+                throw new Error("System-ID nicht gefunden und keine SKU angegeben — Zeile übersprungen");
+              }
+            }
+          } else if (internalArticleNumber && !productFields.sku) {
+            // ── Internal article number only (no SKU in CSV) ────────────────
+            const existing = await prisma.product.findFirst({
+              where: { internalArticleNumber: { equals: internalArticleNumber, mode: "insensitive" } },
+            });
+            if (existing) {
               product = await prisma.product.update({
-                where: { id: systemId },
+                where: { id: existing.id },
                 data: {
-                  ...productFields,
-                  // Keep original import batch
+                  ...buildUpdateFields(productFields),
+                  sku: productFields.sku || existing.sku,
                   importBatchId: existing.importBatchId ?? batch.id,
                 },
               });
             } else {
-              // System-ID not found — fall through to SKU-based upsert
-              const ex2 = await prisma.product.findUnique({ where: { sku: productFields.sku } });
+              throw new Error(`Interne Art.-Nr. „${internalArticleNumber}" nicht gefunden — ohne SKU kann kein neuer Datensatz angelegt werden`);
+            }
+          } else if (internalArticleNumber && productFields.sku) {
+            // ── Both internalArticleNumber + SKU: prefer internalArticleNumber lookup ──
+            const byInternal = await prisma.product.findFirst({
+              where: { internalArticleNumber: { equals: internalArticleNumber, mode: "insensitive" } },
+            });
+            if (byInternal) {
+              product = await prisma.product.update({
+                where: { id: byInternal.id },
+                data: {
+                  ...buildUpdateFields(productFields),
+                  importBatchId: byInternal.importBatchId ?? batch.id,
+                },
+              });
+            } else {
+              // internalArticleNumber not found — fall through to SKU upsert
+              const existing = await prisma.product.findUnique({ where: { sku: productFields.sku } });
               product = await prisma.product.upsert({
                 where: { sku: productFields.sku },
                 create: { ...productFields, importBatchId: batch.id },
-                update: { ...productFields, importBatchId: ex2?.importBatchId ?? batch.id },
+                update: { ...buildUpdateFields(productFields), importBatchId: existing?.importBatchId ?? batch.id },
               });
-              isNew = !ex2;
+              isNew = !existing;
             }
           } else {
             // ── SKU path (default) ───────────────────────────────────────────
@@ -407,7 +486,7 @@ export async function POST(request: NextRequest) {
             product = await prisma.product.upsert({
               where: { sku: productFields.sku },
               create: { ...productFields, importBatchId: batch.id },
-              update: { ...productFields, importBatchId: existing?.importBatchId ?? batch.id },
+              update: { ...buildUpdateFields(productFields), importBatchId: existing?.importBatchId ?? batch.id },
             });
             isNew = !existing;
           }
@@ -436,7 +515,7 @@ export async function POST(request: NextRequest) {
           errorCount++;
           return {
             row: rowNum,
-            sku: (mapped.sku as string) ?? null,
+            sku: (mapped.sku as string) ?? (mapped.internalArticleNumber as string) ?? null,
             status: "error",
             errors: [`Database error: ${err instanceof Error ? err.message : "unknown"}`],
             warnings: [],
@@ -448,7 +527,7 @@ export async function POST(request: NextRequest) {
         successCount++;
         return {
           row: rowNum,
-          sku: (mapped.sku as string) ?? null,
+          sku: (mapped.sku as string) ?? (mapped.internalArticleNumber as string) ?? null,
           status: validation.warnings.length > 0 ? "warning" : "success",
           errors: [],
           warnings: validation.warnings,
