@@ -112,7 +112,8 @@ export default function ImportPage() {
         body: formData,
       });
 
-      let data: Record<string, unknown>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
       try {
         data = await res.json();
       } catch {
@@ -120,7 +121,7 @@ export default function ImportPage() {
         if (res.status === 413) throw new Error("Datei zu groß — maximale Größe: 50 MB");
         throw new Error(`Server-Fehler ${res.status}`);
       }
-      if (!res.ok) throw new Error(data.error as string);
+      if (!res.ok) throw new Error(data.error);
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");
