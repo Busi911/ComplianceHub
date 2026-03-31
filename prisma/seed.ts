@@ -447,7 +447,7 @@ async function main() {
         }
       }
     } catch (err) {
-      console.warn(`  Warning: Could not estimate for ${p.ean}:`, err));
+      console.warn(`  Warning: Could not estimate for ${p.ean}:`, err);
     }
   }
 

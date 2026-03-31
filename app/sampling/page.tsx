@@ -95,6 +95,10 @@ function SamplingPriorityInner() {
   const [categories, setCategories] = useState<string[]>([]);
   const [skippedCount, setSkippedCount] = useState(0);
   const [skippingId, setSkippingId] = useState<string | null>(null); // product currently showing skip dropdown
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [showPresetInput, setShowPresetInput] = useState(false);
+  const [presetSaved, setPresetSaved] = useState(false);
 
   function fetchList() {
     setLoading(true);
@@ -146,6 +150,26 @@ function SamplingPriorityInner() {
   async function unskipProduct(productId: string) {
     await fetch(`/api/sampling/skip?productId=${productId}`, { method: "DELETE" });
     fetchList();
+  }
+
+  async function saveAsPreset() {
+    if (!presetName.trim() || products.length === 0) return;
+    setSavingPreset(true);
+    try {
+      const res = await fetch("/api/sampling/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: presetName.trim(), productIds: products.map((p) => p.id) }),
+      });
+      if (res.ok) {
+        setPresetSaved(true);
+        setShowPresetInput(false);
+        setPresetName("");
+        setTimeout(() => setPresetSaved(false), 3000);
+      }
+    } finally {
+      setSavingPreset(false);
+    }
   }
 
   const colCount = (sortBy === "leverage" ? 9 : 8) + (showSkipped ? 1 : 0);
@@ -229,6 +253,48 @@ function SamplingPriorityInner() {
         <span className="text-sm text-gray-500">
           {loading ? "Lädt…" : `${products.length} Produkte${showSkipped ? " (inkl. übersprungener)" : " ohne eigene Stichprobe"}`}
         </span>
+
+        {/* Save as preset */}
+        {!showPresetInput && products.length > 0 && !loading && (
+          <button
+            onClick={() => setShowPresetInput(true)}
+            className="ml-auto text-sm border border-gray-300 text-gray-600 px-3 py-1.5 rounded hover:bg-gray-50"
+          >
+            Als Vorlage speichern
+          </button>
+        )}
+        {presetSaved && (
+          <span className="ml-auto text-sm text-green-600 font-medium">Vorlage gespeichert</span>
+        )}
+        {showPresetInput && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); saveAsPreset(); }}
+            className="ml-auto flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="Vorlagenname …"
+              autoFocus
+              className="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-400"
+            />
+            <button
+              type="submit"
+              disabled={savingPreset || !presetName.trim()}
+              className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {savingPreset ? "…" : "Speichern"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowPresetInput(false); setPresetName(""); }}
+              className="text-sm text-gray-400 hover:text-gray-700 px-1"
+            >
+              ✕
+            </button>
+          </form>
+        )}
       </div>
 
       {sortBy === "leverage" && (

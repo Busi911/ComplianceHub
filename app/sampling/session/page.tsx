@@ -34,8 +34,17 @@ interface ResolveResult {
   product: ProductHit;
 }
 
+interface Preset {
+  id: string;
+  name: string;
+  description: string | null;
+  productIds: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export default function SamplingSessionPage() {
-  const [addTab, setAddTab] = useState<"search" | "upload">("search");
+  const [addTab, setAddTab] = useState<"search" | "upload" | "preset">("search");
 
   // Search tab state
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,6 +58,11 @@ export default function SamplingSessionPage() {
   const [uploadUnresolved, setUploadUnresolved] = useState<string[]>([]);
   const [uploadDone, setUploadDone] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Preset tab state
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(false);
+  const [loadingPresetId, setLoadingPresetId] = useState<string | null>(null);
 
   // Session state
   const [rows, setRows] = useState<SessionRow[]>([]);
@@ -252,6 +266,31 @@ export default function SamplingSessionPage() {
     setAddTab("search");
   }
 
+  async function fetchPresets() {
+    setPresetsLoading(true);
+    try {
+      const res = await fetch("/api/sampling/presets");
+      const data = await res.json();
+      setPresets(data);
+    } finally {
+      setPresetsLoading(false);
+    }
+  }
+
+  async function loadPreset(presetId: string) {
+    setLoadingPresetId(presetId);
+    try {
+      const res = await fetch(`/api/sampling/presets/${presetId}`);
+      const data = await res.json();
+      for (const product of data.products ?? []) {
+        addProduct(product as ProductHit);
+      }
+      setAddTab("search");
+    } finally {
+      setLoadingPresetId(null);
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   const filledRows = rows.filter(
@@ -361,6 +400,16 @@ export default function SamplingSessionPage() {
               }`}
             >
               Liste / CSV hochladen
+            </button>
+            <button
+              onClick={() => { setAddTab("preset"); fetchPresets(); }}
+              className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+                addTab === "preset"
+                  ? "border-b-2 border-blue-600 text-blue-700 bg-blue-50/40"
+                  : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+              }`}
+            >
+              Vorlage laden
             </button>
           </div>
 
@@ -579,6 +628,50 @@ export default function SamplingSessionPage() {
                   {uploadResolved.length === 0 && uploadUnresolved.length === 0 && (
                     <p className="text-sm text-gray-400">Keine Identifier gefunden.</p>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preset tab */}
+          {addTab === "preset" && (
+            <div className="p-4">
+              {presetsLoading ? (
+                <p className="text-sm text-gray-400">Lädt Vorlagen…</p>
+              ) : presets.length === 0 ? (
+                <p className="text-sm text-gray-500">
+                  Noch keine Vorlagen gespeichert. Speichere eine Vorlage über die{" "}
+                  <a href="/sampling" className="text-blue-600 hover:underline">Prioritätsliste</a>.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700 mb-3">
+                    Vorlage auswählen und alle Produkte zur Session hinzufügen:
+                  </p>
+                  {presets.map((preset) => {
+                    const ids: string[] = JSON.parse(preset.productIds);
+                    return (
+                      <div key={preset.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2.5 hover:bg-gray-50">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm text-gray-900">{preset.name}</div>
+                          {preset.description && (
+                            <div className="text-xs text-gray-500">{preset.description}</div>
+                          )}
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {ids.length} Produkt{ids.length !== 1 ? "e" : ""} ·{" "}
+                            {new Date(preset.updatedAt).toLocaleDateString("de-DE")}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => loadPreset(preset.id)}
+                          disabled={loadingPresetId === preset.id}
+                          className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 disabled:opacity-50 flex-shrink-0"
+                        >
+                          {loadingPresetId === preset.id ? "Lädt…" : "Laden"}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

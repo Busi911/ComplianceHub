@@ -356,8 +356,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Process rows in parallel batches for speed.
-    // Batching avoids N+1 sequential DB round-trips while preventing DB overload.
-    const BATCH_SIZE = 10;
+    // Larger batch size for better throughput on big files.
+    const BATCH_SIZE = 50;
 
     type RowResult = (typeof results)[0];
 
@@ -440,34 +440,46 @@ export async function POST(request: NextRequest) {
           let isNew = false;
 
           if (systemId) {
-            // ── System-ID path: look up by permanent ID ──────────────────────
-            // System-ID is the ONLY lookup mechanism. If found → update.
-            // If not found → create new (EAN required in this case).
-            const existing = await prisma.product.findUnique({ where: { id: systemId } });
-            if (existing) {
+            // ── System-ID path (preferred): look up by permanent ID ──────────
+            const existingById = await prisma.product.findUnique({ where: { id: systemId } });
+            if (existingById) {
+              // Found by System-ID → update, keep existing EAN if not provided in CSV
               const updateData = buildUpdateFields({
                 ...productFields,
-                ean: productFields.ean || existing.ean,
-                importBatchId: existing.importBatchId ?? batch.id,
+                ean: productFields.ean || existingById.ean,
+                importBatchId: existingById.importBatchId ?? batch.id,
               });
               product = await prisma.product.update({ where: { id: systemId }, data: updateData });
             } else {
-              // System-ID not found → create new article
-              if (!productFields.ean) {
+              // System-ID not in DB → fall through to EAN-based upsert below
+              const existingByEan = productFields.ean
+                ? await prisma.product.findUnique({ where: { ean: productFields.ean } })
+                : null;
+              if (existingByEan) {
+                product = await prisma.product.update({
+                  where: { id: existingByEan.id },
+                  data: { ...buildUpdateFields(productFields), importBatchId: existingByEan.importBatchId ?? batch.id },
+                });
+              } else if (productFields.ean) {
+                product = await prisma.product.create({ data: { ...productFields, importBatchId: batch.id } });
+                isNew = true;
+              } else {
                 throw new Error("System-ID nicht gefunden und keine EAN angegeben — Zeile übersprungen");
               }
-              product = await prisma.product.create({
-                data: { ...productFields, importBatchId: batch.id },
-              });
-              isNew = true;
             }
           } else {
-            // ── No System-ID: always create a new article ────────────────────
-            // EAN is required (ensured by validation above).
-            product = await prisma.product.create({
-              data: { ...productFields, importBatchId: batch.id },
-            });
-            isNew = true;
+            // ── No System-ID: EAN-based upsert ───────────────────────────────
+            // Update if EAN already exists, create if new. EAN is required.
+            const existingByEan = await prisma.product.findUnique({ where: { ean: productFields.ean } });
+            if (existingByEan) {
+              product = await prisma.product.update({
+                where: { id: existingByEan.id },
+                data: { ...buildUpdateFields(productFields), importBatchId: existingByEan.importBatchId ?? batch.id },
+              });
+            } else {
+              product = await prisma.product.create({ data: { ...productFields, importBatchId: batch.id } });
+              isNew = true;
+            }
           }
 
           // Ensure packaging profile exists

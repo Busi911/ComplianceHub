@@ -178,6 +178,15 @@ model ManufacturerRequestItem {
   @@index([productId])
 }
 
+model SamplingPreset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  productIds  String   // JSON array of product IDs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 enum PackagingStatus {
   IMPORTED
   ESTIMATED
