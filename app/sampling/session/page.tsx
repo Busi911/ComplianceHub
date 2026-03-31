@@ -18,9 +18,11 @@ interface ProductHit {
 
 interface SessionRow {
   product: ProductHit;
-  plasticG: string;
-  paperG: string;
-  totalG: string;
+  paperG: string;      // PPK (Papier/Pappe/Karton)
+  plasticG: string;    // Kunststoff
+  // totalG is auto-calculated: paperG + plasticG — not stored separately
+  netWeightG: string;  // optional
+  grossWeightG: string; // optional
   notes: string;
   saved: boolean;
   saving: boolean;
@@ -78,9 +80,10 @@ export default function SamplingSessionPage() {
       ...prev,
       {
         product,
-        plasticG: "",
         paperG: "",
-        totalG: "",
+        plasticG: "",
+        netWeightG: "",
+        grossWeightG: "",
         notes: "",
         saved: false,
         saving: false,
@@ -105,7 +108,7 @@ export default function SamplingSessionPage() {
   async function saveRow(id: string) {
     const row = rows.find((r) => r.product.id === id);
     if (!row || row.saved) return;
-    if (!row.plasticG && !row.paperG && !row.totalG) return;
+    if (!row.plasticG && !row.paperG) return;
 
     setRows((prev) =>
       prev.map((r) =>
@@ -120,9 +123,18 @@ export default function SamplingSessionPage() {
         body: JSON.stringify({
           productId: row.product.id,
           sampledBy: globalSampledBy || null,
-          measuredPlasticG: row.plasticG || null,
           measuredPaperG: row.paperG || null,
-          measuredTotalPackagingG: row.totalG || null,
+          measuredPlasticG: row.plasticG || null,
+          measuredTotalPackagingG:
+            row.paperG || row.plasticG
+              ? String(
+                  Math.round(
+                    ((parseFloat(row.paperG || "0") + parseFloat(row.plasticG || "0")) * 10)
+                  ) / 10
+                )
+              : null,
+          netWeightAtSamplingG: row.netWeightG || null,
+          grossWeightAtSamplingG: row.grossWeightG || null,
           notes: row.notes || null,
         }),
       });
@@ -154,7 +166,7 @@ export default function SamplingSessionPage() {
   async function saveAll() {
     setSavingAll(true);
     const toSave = rows.filter(
-      (r) => !r.saved && (r.plasticG || r.paperG || r.totalG)
+      (r) => !r.saved && (r.plasticG || r.paperG)
     );
     for (const row of toSave) {
       await saveRow(row.product.id);
@@ -243,7 +255,7 @@ export default function SamplingSessionPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   const filledRows = rows.filter(
-    (r) => !r.saved && (r.plasticG || r.paperG || r.totalG)
+    (r) => !r.saved && (r.plasticG || r.paperG)
   ).length;
 
   const newFromUpload = uploadResolved.filter(
@@ -621,6 +633,23 @@ export default function SamplingSessionPage() {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
+                          <label className="text-xs font-medium text-green-700 block mb-1">
+                            PPK – Papier/Pappe (g)
+                          </label>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            min="0"
+                            value={row.paperG}
+                            onChange={(e) =>
+                              updateRow(row.product.id, "paperG", e.target.value)
+                            }
+                            placeholder="0.0"
+                            className="w-full border border-green-200 rounded-lg px-3 py-3 text-base text-center outline-none focus:border-green-400 bg-green-50"
+                          />
+                        </div>
+                        <div>
                           <label className="text-xs font-medium text-blue-700 block mb-1">
                             Kunststoff (g)
                           </label>
@@ -637,40 +666,54 @@ export default function SamplingSessionPage() {
                             className="w-full border border-blue-200 rounded-lg px-3 py-3 text-base text-center outline-none focus:border-blue-400 bg-blue-50"
                           />
                         </div>
+                      </div>
+                      {/* Gesamt: auto-calculated, read-only */}
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 block mb-1">
+                          Gesamt (g) <span className="font-normal text-gray-400">– auto</span>
+                        </label>
+                        <div className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base text-center bg-gray-50 text-gray-600 font-mono">
+                          {row.paperG || row.plasticG
+                            ? (Math.round((parseFloat(row.paperG || "0") + parseFloat(row.plasticG || "0")) * 10) / 10).toFixed(1)
+                            : "—"}
+                        </div>
+                      </div>
+                      {/* Optional: net + gross weight */}
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-xs font-medium text-green-700 block mb-1">
-                            Papier (g)
+                          <label className="text-xs font-medium text-gray-500 block mb-1">
+                            Nettogewicht (g) <span className="font-normal text-gray-400">opt.</span>
                           </label>
                           <input
                             type="number"
                             inputMode="decimal"
                             step="0.1"
                             min="0"
-                            value={row.paperG}
+                            value={row.netWeightG}
                             onChange={(e) =>
-                              updateRow(row.product.id, "paperG", e.target.value)
+                              updateRow(row.product.id, "netWeightG", e.target.value)
                             }
-                            placeholder="0.0"
-                            className="w-full border border-green-200 rounded-lg px-3 py-3 text-base text-center outline-none focus:border-green-400 bg-green-50"
+                            placeholder="optional"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-center outline-none focus:border-gray-400"
                           />
                         </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 block mb-1">
-                          Gesamt (g)
-                        </label>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          step="0.1"
-                          min="0"
-                          value={row.totalG}
-                          onChange={(e) =>
-                            updateRow(row.product.id, "totalG", e.target.value)
-                          }
-                          placeholder="0.0"
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base text-center outline-none focus:border-gray-400"
-                        />
+                        <div>
+                          <label className="text-xs font-medium text-gray-500 block mb-1">
+                            Bruttogewicht (g) <span className="font-normal text-gray-400">opt.</span>
+                          </label>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            min="0"
+                            value={row.grossWeightG}
+                            onChange={(e) =>
+                              updateRow(row.product.id, "grossWeightG", e.target.value)
+                            }
+                            placeholder="optional"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-center outline-none focus:border-gray-400"
+                          />
+                        </div>
                       </div>
                       <div>
                         <input
@@ -690,7 +733,7 @@ export default function SamplingSessionPage() {
                         onClick={() => saveRow(row.product.id)}
                         disabled={
                           row.saving ||
-                          (!row.plasticG && !row.paperG && !row.totalG)
+                          (!row.plasticG && !row.paperG)
                         }
                         className="w-full bg-green-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-40 transition-colors"
                       >
@@ -701,8 +744,8 @@ export default function SamplingSessionPage() {
 
                   {row.saved && (
                     <div className="text-sm text-green-700">
-                      Kunststoff: {row.plasticG || "—"} g · Papier: {row.paperG || "—"} g
-                      {row.totalG ? ` · Gesamt: ${row.totalG} g` : ""}
+                      PPK: {row.paperG || "—"} g · Kunststoff: {row.plasticG || "—"} g
+                      {(row.paperG || row.plasticG) ? ` · Gesamt: ${(Math.round((parseFloat(row.paperG || "0") + parseFloat(row.plasticG || "0")) * 10) / 10).toFixed(1)} g` : ""}
                     </div>
                   )}
                 </div>
@@ -731,9 +774,11 @@ export default function SamplingSessionPage() {
                       <th className="px-3 py-2.5 font-medium text-gray-600 w-8">#</th>
                       <th className="px-3 py-2.5 font-medium text-gray-600">SKU / Produkt</th>
                       <th className="px-3 py-2.5 font-medium text-gray-600">Kategorie</th>
-                      <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-28">Kunststoff (g)</th>
-                      <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-28">Papier (g)</th>
-                      <th className="px-3 py-2.5 font-medium text-gray-600 text-center w-28">Gesamt (g)</th>
+                      <th className="px-3 py-2.5 font-medium text-green-700 text-center w-28">PPK (g)</th>
+                      <th className="px-3 py-2.5 font-medium text-blue-700 text-center w-28">Kunststoff (g)</th>
+                      <th className="px-3 py-2.5 font-medium text-gray-500 text-center w-24">Gesamt</th>
+                      <th className="px-3 py-2.5 font-medium text-gray-500 text-center w-24 hidden lg:table-cell">Netto (g)</th>
+                      <th className="px-3 py-2.5 font-medium text-gray-500 text-center w-24 hidden lg:table-cell">Brutto (g)</th>
                       <th className="px-3 py-2.5 font-medium text-gray-600 w-36">Notiz</th>
                       <th className="px-3 py-2.5 font-medium text-gray-600 w-24">Aktion</th>
                     </tr>
@@ -761,22 +806,34 @@ export default function SamplingSessionPage() {
                           {row.product.brand && <div className="text-gray-400">{row.product.brand}</div>}
                         </td>
                         <td className="px-3 py-2">
-                          <input type="number" step="0.1" min="0" value={row.plasticG}
-                            onChange={(e) => updateRow(row.product.id, "plasticG", e.target.value)}
-                            disabled={row.saved} placeholder="0.0"
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center outline-none focus:border-blue-400 disabled:bg-gray-100" />
-                        </td>
-                        <td className="px-3 py-2">
                           <input type="number" step="0.1" min="0" value={row.paperG}
                             onChange={(e) => updateRow(row.product.id, "paperG", e.target.value)}
                             disabled={row.saved} placeholder="0.0"
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center outline-none focus:border-green-400 disabled:bg-gray-100" />
+                            className="w-full border border-green-200 rounded px-2 py-1 text-sm text-center outline-none focus:border-green-400 disabled:bg-gray-100 bg-green-50" />
                         </td>
                         <td className="px-3 py-2">
-                          <input type="number" step="0.1" min="0" value={row.totalG}
-                            onChange={(e) => updateRow(row.product.id, "totalG", e.target.value)}
+                          <input type="number" step="0.1" min="0" value={row.plasticG}
+                            onChange={(e) => updateRow(row.product.id, "plasticG", e.target.value)}
                             disabled={row.saved} placeholder="0.0"
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-center outline-none focus:border-gray-400 disabled:bg-gray-100" />
+                            className="w-full border border-blue-200 rounded px-2 py-1 text-sm text-center outline-none focus:border-blue-400 disabled:bg-gray-100 bg-blue-50" />
+                        </td>
+                        {/* Gesamt: auto-calculated, read-only */}
+                        <td className="px-3 py-2 text-center text-sm font-mono text-gray-600 bg-gray-50">
+                          {row.paperG || row.plasticG
+                            ? (Math.round((parseFloat(row.paperG || "0") + parseFloat(row.plasticG || "0")) * 10) / 10).toFixed(1)
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 hidden lg:table-cell">
+                          <input type="number" step="0.1" min="0" value={row.netWeightG}
+                            onChange={(e) => updateRow(row.product.id, "netWeightG", e.target.value)}
+                            disabled={row.saved} placeholder="opt."
+                            className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center outline-none focus:border-gray-400 disabled:bg-gray-100" />
+                        </td>
+                        <td className="px-3 py-2 hidden lg:table-cell">
+                          <input type="number" step="0.1" min="0" value={row.grossWeightG}
+                            onChange={(e) => updateRow(row.product.id, "grossWeightG", e.target.value)}
+                            disabled={row.saved} placeholder="opt."
+                            className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center outline-none focus:border-gray-400 disabled:bg-gray-100" />
                         </td>
                         <td className="px-3 py-2">
                           <input type="text" value={row.notes}
@@ -792,7 +849,7 @@ export default function SamplingSessionPage() {
                           ) : (
                             <div className="flex items-center gap-1">
                               <button onClick={() => saveRow(row.product.id)}
-                                disabled={row.saving || (!row.plasticG && !row.paperG && !row.totalG)}
+                                disabled={row.saving || (!row.plasticG && !row.paperG)}
                                 className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-40">
                                 {row.saving ? "…" : "Speichern"}
                               </button>
@@ -824,7 +881,7 @@ export default function SamplingSessionPage() {
                 <thead>
                   <tr>
                     <th>#</th><th>SKU</th><th>Produkt</th><th>Kategorie</th>
-                    <th>Kunststoff (g)</th><th>Papier (g)</th><th>Gesamt (g)</th><th>Notiz</th>
+                    <th>PPK (g)</th><th>Kunststoff (g)</th><th>Gesamt (g)</th><th>Netto (g)</th><th>Brutto (g)</th><th>Notiz</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -834,7 +891,7 @@ export default function SamplingSessionPage() {
                       <td>{row.product.sku}{row.product.internalArticleNumber ? ` / ${row.product.internalArticleNumber}` : ""}</td>
                       <td>{row.product.productName}</td>
                       <td>{row.product.category}</td>
-                      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+                      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
                     </tr>
                   ))}
                 </tbody>

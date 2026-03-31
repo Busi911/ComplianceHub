@@ -63,6 +63,7 @@ function ProductsPageInner() {
   const category = searchParams.get("category") ?? "";
   const brand = searchParams.get("brand") ?? "";
   const status = searchParams.get("status") ?? "";
+  const minSamples = searchParams.get("minSamples") ?? "";
   const page = parseInt(searchParams.get("page") ?? "1");
 
   const fetchProducts = useCallback(() => {
@@ -72,6 +73,7 @@ function ProductsPageInner() {
     if (category) params.set("category", category);
     if (brand) params.set("brand", brand);
     if (status) params.set("status", status);
+    if (minSamples) params.set("minSamples", minSamples);
     params.set("page", page.toString());
 
     fetch(`/api/products?${params.toString()}`)
@@ -83,7 +85,7 @@ function ProductsPageInner() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [search, category, brand, status, page]);
+  }, [search, category, brand, status, minSamples, page]);
 
   useEffect(() => {
     fetchProducts();
@@ -238,7 +240,34 @@ function ProductsPageInner() {
           <option value="sampled">Gemessen</option>
           <option value="reviewed">Geprüft</option>
         </select>
-        {(search || category || brand || status) && (
+        {/* Stichproben-Filter */}
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+          <button
+            onClick={() => setParam("minSamples", "")}
+            className={`px-3 py-1.5 transition-colors ${
+              !minSamples ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Alle
+          </button>
+          <button
+            onClick={() => setParam("minSamples", "1")}
+            className={`px-3 py-1.5 border-l border-gray-300 transition-colors ${
+              minSamples === "1" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            ≥ 1 Stichprobe
+          </button>
+          <button
+            onClick={() => setParam("minSamples", "2")}
+            className={`px-3 py-1.5 border-l border-gray-300 transition-colors ${
+              minSamples === "2" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            &gt; 1 Stichprobe
+          </button>
+        </div>
+        {(search || category || brand || status || minSamples) && (
           <button
             onClick={() => router.push("/products")}
             className="text-sm text-gray-500 hover:text-gray-700 underline"
