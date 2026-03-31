@@ -30,15 +30,24 @@ function normalizeKey(raw: string): string {
 
 // Known columns → internal field names
 const BUFFER_FIELD_MAP: Record<string, string> = {
+  // ── EAN ──────────────────────────────────────────────────────────────────────
   ean: "ean",
   gtin: "ean",
-  "art.-nr": "ean",
-  "art.nr": "ean",
-  artikelnummer: "ean",
-  "artikel-nr": "ean",
   sku: "ean",
-  "hersteller art nr": "ean",
-  "hersteller-art.-nr": "ean",
+  // ── Interne Artikelnummer ──────────────────────────────────────────────────
+  "art.-nr": "internalArticleNr",
+  "art.nr": "internalArticleNr",
+  artikelnummer: "internalArticleNr",
+  "artikel-nr": "internalArticleNr",
+  "interne artikelnummer": "internalArticleNr",
+  "interne art.-nr": "internalArticleNr",
+  "int. art.-nr": "internalArticleNr",
+  "int.art.nr": "internalArticleNr",
+  "interne nr": "internalArticleNr",
+  interneartnr: "internalArticleNr",
+  "hersteller art nr": "internalArticleNr",
+  "hersteller-art.-nr": "internalArticleNr",
+  // ── Hersteller ────────────────────────────────────────────────────────────
   hersteller: "manufacturerName",
   manufacturer: "manufacturerName",
   herstellername: "manufacturerName",
@@ -173,7 +182,8 @@ export async function POST(request: NextRequest) {
   const extraHeaders = headerMap.filter((m) => !m.field && normalizeKey(m.header) !== "").map((m) => m.header);
 
   const entries: {
-    ean: string;
+    ean: string | null;
+    internalArticleNr: string | null;
     manufacturerName: string | null;
     productName: string | null;
     mfrNetWeightG: number | null;
@@ -193,8 +203,11 @@ export async function POST(request: NextRequest) {
       if (field) mapped[field] = row[header] ?? null;
     }
 
-    const ean = (String(mapped.ean ?? "")).trim().replace(/\s/g, "");
-    if (!ean) {
+    const ean = (String(mapped.ean ?? "")).trim().replace(/\s/g, "") || null;
+    const internalArticleNr = (String(mapped.internalArticleNr ?? "")).trim() || null;
+
+    // Mindestens EAN oder interne Artikelnummer muss vorhanden sein
+    if (!ean && !internalArticleNr) {
       skipped.push(JSON.stringify(row).slice(0, 80));
       continue;
     }
@@ -207,6 +220,7 @@ export async function POST(request: NextRequest) {
 
     entries.push({
       ean,
+      internalArticleNr,
       manufacturerName: manufacturerNameOverride !== null
         ? manufacturerNameOverride
         : ((String(mapped.manufacturerName ?? "")).trim() || null),
@@ -221,7 +235,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (entries.length === 0) {
-    return NextResponse.json({ error: "Keine Zeilen mit EAN gefunden", skipped }, { status: 400 });
+    return NextResponse.json({ error: "Keine Zeilen mit EAN oder interner Artikelnummer gefunden", skipped }, { status: 400 });
   }
 
   // Upsert: if same EAN from same file already in buffer (unmatched), overwrite it
@@ -230,15 +244,29 @@ export async function POST(request: NextRequest) {
   let autoMatched = 0;
 
   for (const entry of entries) {
-    // Check if product with this EAN already exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { ean: entry.ean },
-      select: { id: true },
-    });
+    // Produkt suchen: erst per EAN, dann per interner Artikelnummer
+    let existingProduct: { id: string } | null = null;
+    if (entry.ean) {
+      existingProduct = await prisma.product.findUnique({
+        where: { ean: entry.ean },
+        select: { id: true },
+      });
+    }
+    if (!existingProduct && entry.internalArticleNr) {
+      existingProduct = await prisma.product.findFirst({
+        where: { internalArticleNumber: entry.internalArticleNr },
+        select: { id: true },
+      });
+    }
 
-    // Check if buffer entry already exists (same EAN, unmatched)
+    // Bestehenden Puffer-Eintrag suchen (unmatched, gleiche EAN oder interne Nr.)
     const existingBuffer = await prisma.manufacturerDataBuffer.findFirst({
-      where: { ean: entry.ean, matchedProductId: null },
+      where: {
+        matchedProductId: null,
+        ...(entry.ean
+          ? { ean: entry.ean }
+          : { internalArticleNr: entry.internalArticleNr }),
+      },
     });
 
     if (existingProduct) {
