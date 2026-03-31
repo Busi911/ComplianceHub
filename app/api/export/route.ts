@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       // Ideal for bulk corrections — smaller file, faster to open in Excel
       const headers = [
         "SKU",
-        "Interne Art.-Nr.",
+        "InterneArtNr",
         "Produktname",
         "Hersteller",
         "Marke",
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
       // Full export: all columns including packaging/estimation data
       const headers = [
         "SKU",
-        "Interne Art.-Nr.",
+        "InterneArtNr",
         "Produktname",
         "Hersteller",
         "Marke",
