@@ -6,6 +6,10 @@ import { validateProductInput } from "@/lib/validation";
 import { updateProfileAfterSampling } from "@/lib/estimation";
 import { PackagingStatus } from "@prisma/client";
 
+// Allow large CSV uploads and enough time to process them
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 /**
  * Detects file encoding and returns UTF-8 string.
  * Handles UTF-8 (with/without BOM) and Windows-1252 / Latin-1 (common in German Excel exports).

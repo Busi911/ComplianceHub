@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    // Raise proxy body limit for large CSV uploads (default 4 MB)
+    proxyClientMaxBodySize: "50mb",
+  },
 };
 
 export default nextConfig;

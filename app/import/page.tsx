@@ -112,7 +112,15 @@ export default function ImportPage() {
         body: formData,
       });
 
-      const data = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        // Server returned non-JSON (e.g. 413 Request Entity Too Large)
+        if (res.status === 413) throw new Error("Datei zu groß — maximale Größe: 50 MB");
+        throw new Error(`Server-Fehler ${res.status}`);
+      }
       if (!res.ok) throw new Error(data.error);
       setResult(data);
     } catch (err) {
