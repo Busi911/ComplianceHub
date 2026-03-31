@@ -187,26 +187,36 @@ async function tryRegressionEstimate(
   if (xs.length < 5) return null;
 
   const plasticModel = linearRegression(xs, plasticYs);
-  if (!plasticModel || plasticModel.r2 < 0.4) return null;
+  const paperModel = paperYs.length === xs.length ? linearRegression(xs, paperYs) : null;
 
-  const predictedPlastic = plasticModel.a + plasticModel.b * grossWeightG;
-  if (predictedPlastic < 0) return null;
+  const plasticOk = plasticModel != null && plasticModel.r2 >= 0.4;
+  const paperOk = paperModel != null && paperModel.r2 >= 0.3;
 
-  let predictedPaper: number | null = null;
-  if (paperYs.length === xs.length) {
-    const paperModel = linearRegression(xs, paperYs);
-    if (paperModel && paperModel.r2 >= 0.3) {
-      predictedPaper = Math.max(0, paperModel.a + paperModel.b * grossWeightG);
-    }
-  }
+  // Need at least one valid regression
+  if (!plasticOk && !paperOk) return null;
 
-  const confidence = Math.round((0.2 + plasticModel.r2 * 0.5) * 100) / 100;
+  const predictedPlastic = plasticOk
+    ? Math.max(0, plasticModel!.a + plasticModel!.b * grossWeightG)
+    : null;
+  if (plasticOk && predictedPlastic! < 0) return null;
+
+  const predictedPaper = paperOk
+    ? Math.max(0, paperModel!.a + paperModel!.b * grossWeightG)
+    : null;
+
+  // Confidence based on whichever model(s) we have
+  const bestR2 = Math.max(plasticOk ? plasticModel!.r2 : 0, paperOk ? paperModel!.r2 : 0);
+  const confidence = Math.round((0.2 + bestR2 * 0.5) * 100) / 100;
+
+  const methodParts: string[] = [];
+  if (plasticOk) methodParts.push(`plastic_r2=${Math.round(plasticModel!.r2 * 100)}`);
+  if (paperOk) methodParts.push(`paper_r2=${Math.round(paperModel!.r2 * 100)}`);
 
   return {
-    plasticG: Math.round(predictedPlastic * 10) / 10,
+    plasticG: predictedPlastic !== null ? Math.round(predictedPlastic * 10) / 10 : null,
     paperG: predictedPaper !== null ? Math.round(predictedPaper * 10) / 10 : null,
     confidenceScore: Math.min(confidence, 0.70),
-    method: `regression_gross_weight_r2=${Math.round(plasticModel.r2 * 100)}_n${xs.length}`,
+    method: `regression_gross_weight_${methodParts.join("_")}_n${xs.length}`,
     basedOnProductIds: catProducts.map((p) => p.id),
   };
 }
