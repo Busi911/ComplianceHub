@@ -363,6 +363,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Product IDs that need estimation after all DB writes are done.
+    // Collected here so we can run them sequentially (not 50 concurrent) after all batches.
+    const estimationQueue: string[] = [];
+
     // Process rows in parallel batches for speed.
     // Larger batch size for better throughput on big files.
     const BATCH_SIZE = 50;
@@ -497,11 +501,20 @@ export async function POST(request: NextRequest) {
             update: {},
           });
 
-          // Hersteller-Puffer: apply any pre-loaded manufacturer data for this EAN.
+          // Hersteller-Puffer: apply any pre-loaded manufacturer data for this EAN / interner Artikelnummer.
           // Fire-and-forget — buffer matching must never block or fail an import row.
-          prisma.manufacturerDataBuffer.findFirst({
-            where: { ean: productFields.ean, matchedProductId: null },
-          }).then(async (bufferEntry) => {
+          (async () => {
+            // Erst per EAN suchen, dann per internalArticleNumber
+            let bufferEntry = productFields.ean
+              ? await prisma.manufacturerDataBuffer.findFirst({
+                  where: { ean: productFields.ean, matchedProductId: null },
+                })
+              : null;
+            if (!bufferEntry && productFields.internalArticleNumber) {
+              bufferEntry = await prisma.manufacturerDataBuffer.findFirst({
+                where: { internalArticleNr: productFields.internalArticleNumber, matchedProductId: null },
+              });
+            }
             if (!bufferEntry) return;
             await prisma.product.update({
               where: { id: product.id },
@@ -516,11 +529,10 @@ export async function POST(request: NextRequest) {
               where: { id: bufferEntry.id },
               data: { matchedProductId: product.id, matchedAt: new Date() },
             });
-          }).catch(console.error);
+          })().catch(console.error);
 
-          // Estimation: fire-and-forget — don't block the response.
-          // Runs in background; errors are logged but don't fail the import row.
-          updateProfileAfterSampling(product.id).catch(console.error);
+          // Queue for sequential estimation after all batches finish (avoids DB connection stampede).
+          estimationQueue.push(product.id);
 
           successCount++;
           return {
@@ -571,6 +583,17 @@ export async function POST(request: NextRequest) {
         where: { id: batch.id },
         data: { successCount, errorCount },
       });
+    }
+
+    // Run estimations sequentially in background — one at a time with a small pause
+    // to avoid exhausting the DB connection pool (Neon serverless connection limit).
+    if (estimationQueue.length > 0) {
+      (async () => {
+        for (const productId of estimationQueue) {
+          await updateProfileAfterSampling(productId).catch(console.error);
+          await new Promise((r) => setTimeout(r, 50));
+        }
+      })();
     }
 
     return NextResponse.json({

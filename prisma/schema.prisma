@@ -179,28 +179,30 @@ model ManufacturerRequestItem {
   @@index([productId])
 }
 
-// Hersteller senden ihre Artikeldaten vorab mit EAN.
+// Hersteller senden ihre Artikeldaten vorab mit EAN oder interner Artikelnummer.
 // Solange der Artikel noch nicht im Sortiment ist, liegen die Daten im Puffer.
-// Sobald ein Produkt mit passender EAN importiert wird, werden die Herstellerdaten automatisch übernommen.
+// Sobald ein Produkt mit passender EAN / interner Artikelnummer importiert wird, werden die Herstellerdaten automatisch übernommen.
 model ManufacturerDataBuffer {
-  id               String    @id @default(cuid())
-  ean              String
-  manufacturerName String?
-  productName      String?
-  mfrNetWeightG    Float?
-  mfrGrossWeightG  Float?
-  mfrPlasticG      Float?
-  mfrPaperG        Float?
-  extraJson        String?   // alle weiteren CSV-Spalten als JSON
-  sourceFileName   String?
-  matchedProductId String?
-  matchedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  ean                String?   // EAN bevorzugt; optional wenn internalArticleNr gesetzt
+  internalArticleNr  String?   // interne Artikelnummer als Fallback-Identifier
+  manufacturerName   String?
+  productName        String?
+  mfrNetWeightG      Float?
+  mfrGrossWeightG    Float?
+  mfrPlasticG        Float?
+  mfrPaperG          Float?
+  extraJson          String?   // alle weiteren CSV-Spalten als JSON
+  sourceFileName     String?
+  matchedProductId   String?
+  matchedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  matchedProduct   Product?  @relation(fields: [matchedProductId], references: [id])
+  matchedProduct     Product?  @relation(fields: [matchedProductId], references: [id])
 
   @@index([ean])
+  @@index([internalArticleNr])
   @@index([matchedProductId])
 }
 

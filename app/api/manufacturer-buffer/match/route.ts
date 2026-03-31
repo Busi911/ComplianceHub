@@ -5,13 +5,14 @@ export const dynamic = "force-dynamic";
 
 // POST /api/manufacturer-buffer/match
 // Re-runs matching for all unmatched buffer entries.
-// Called manually from the UI when user wants to trigger a fresh match pass.
+// Matching: erst per EAN, dann per internalArticleNr → internalArticleNumber.
 export async function POST() {
   const unmatched = await prisma.manufacturerDataBuffer.findMany({
     where: { matchedProductId: null },
     select: {
       id: true,
       ean: true,
+      internalArticleNr: true,
       mfrNetWeightG: true,
       mfrGrossWeightG: true,
       mfrPlasticG: true,
@@ -23,21 +24,42 @@ export async function POST() {
     return NextResponse.json({ matched: 0, remaining: 0 });
   }
 
-  // Fetch all products whose EAN appears in the unmatched list
-  const eans = [...new Set(unmatched.map((e) => e.ean))];
-  const products = await prisma.product.findMany({
-    where: { ean: { in: eans } },
-    select: { id: true, ean: true },
-  });
-  const productByEan = new Map(products.map((p) => [p.ean, p.id]));
+  // Alle EANs und internen Artikelnummern aus ungematchten Einträgen sammeln
+  const eans = [...new Set(unmatched.map((e) => e.ean).filter((e): e is string => !!e))];
+  const internalNrs = [...new Set(unmatched.map((e) => e.internalArticleNr).filter((n): n is string => !!n))];
+
+  // Produkte per EAN laden
+  const productsByEan = new Map<string, string>(); // ean → productId
+  if (eans.length > 0) {
+    const products = await prisma.product.findMany({
+      where: { ean: { in: eans } },
+      select: { id: true, ean: true },
+    });
+    for (const p of products) productsByEan.set(p.ean, p.id);
+  }
+
+  // Produkte per interner Artikelnummer laden (Fallback)
+  const productsByInternalNr = new Map<string, string>(); // internalArticleNumber → productId
+  if (internalNrs.length > 0) {
+    const products = await prisma.product.findMany({
+      where: { internalArticleNumber: { in: internalNrs } },
+      select: { id: true, internalArticleNumber: true },
+    });
+    for (const p of products) {
+      if (p.internalArticleNumber) productsByInternalNr.set(p.internalArticleNumber, p.id);
+    }
+  }
 
   let matched = 0;
 
   for (const entry of unmatched) {
-    const productId = productByEan.get(entry.ean);
+    // EAN bevorzugen, dann interne Artikelnummer
+    const productId =
+      (entry.ean ? productsByEan.get(entry.ean) : undefined) ??
+      (entry.internalArticleNr ? productsByInternalNr.get(entry.internalArticleNr) : undefined);
+
     if (!productId) continue;
 
-    // Apply mfr fields to product (only overwrite non-null buffer values)
     await prisma.product.update({
       where: { id: productId },
       data: {

@@ -5,7 +5,8 @@ import Link from "next/link";
 
 interface BufferItem {
   id: string;
-  ean: string;
+  ean: string | null;
+  internalArticleNr: string | null;
   manufacturerName: string | null;
   productName: string | null;
   mfrNetWeightG: number | null;
@@ -114,9 +115,10 @@ export default function ManufacturerBufferPage() {
 
   function downloadTemplate() {
     const bom = "\uFEFF";
-    const header = "EAN;Hersteller;Produktname;Netto-Gewicht;Brutto-Gewicht;Kunststoff;Papier";
-    const example = "4012345678901;Muster GmbH;Beispiel-Artikel 500ml;320;450;15.5;8";
-    const csv = bom + [header, example].join("\r\n");
+    const header = "EAN;Interne Art-Nr;Hersteller;Produktname;Netto-Gewicht;Brutto-Gewicht;Kunststoff;Papier";
+    const example1 = "4012345678901;;Muster GmbH;Beispiel-Artikel 500ml;320;450;15.5;8";
+    const example2 = ";ART-00123;Muster GmbH;Nur-Interne-Nr Artikel;210;300;10;5";
+    const csv = bom + [header, example1, example2].join("\r\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -164,11 +166,15 @@ export default function ManufacturerBufferPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-2 text-sm text-gray-500">
             <p>
-              Pflichtfeld: <code className="bg-gray-100 px-1 rounded">EAN</code>.
-              Alle anderen Felder sind <strong>optional</strong> — leere Zellen werden einfach ignoriert.
+              Pflichtfeld: <code className="bg-gray-100 px-1 rounded">EAN</code> <strong>oder</strong>{" "}
+              <code className="bg-gray-100 px-1 rounded">Interne Art-Nr</code> — mindestens eines muss gefüllt sein.
+              EAN wird bevorzugt; ist keine EAN vorhanden, wird die interne Artikelnummer zum Matchen verwendet.
+              Alle anderen Felder sind optional — leere Zellen werden ignoriert.
             </p>
             <p>
               Mögliche Spalten:{" "}
+              <code className="bg-gray-100 px-1 rounded">EAN</code>,{" "}
+              <code className="bg-gray-100 px-1 rounded">Interne Art-Nr</code>,{" "}
               <code className="bg-gray-100 px-1 rounded">Hersteller</code>,{" "}
               <code className="bg-gray-100 px-1 rounded">Produktname</code>,{" "}
               <code className="bg-gray-100 px-1 rounded">Netto-Gewicht</code>,{" "}
@@ -233,7 +239,7 @@ export default function ManufacturerBufferPage() {
             {uploadResult.autoMatched > 0 && <> <strong>{uploadResult.autoMatched} sofort gematcht</strong>,</>}
             {" "}{uploadResult.created} neu angelegt,
             {" "}{uploadResult.updated} aktualisiert
-            {uploadResult.skipped > 0 && <>, {uploadResult.skipped} ohne EAN übersprungen</>}.
+            {uploadResult.skipped > 0 && <>, {uploadResult.skipped} ohne EAN/Art-Nr übersprungen</>}.
           </div>
         )}
       </div>
@@ -294,7 +300,7 @@ export default function ManufacturerBufferPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left">
-              <th className="px-4 py-2.5 font-medium text-gray-600">EAN</th>
+              <th className="px-4 py-2.5 font-medium text-gray-600">EAN / Art-Nr</th>
               <th className="px-4 py-2.5 font-medium text-gray-600">Hersteller / Produkt</th>
               <th className="px-4 py-2.5 font-medium text-gray-600 hidden md:table-cell">Netto (g)</th>
               <th className="px-4 py-2.5 font-medium text-gray-600 hidden md:table-cell">Brutto (g)</th>
@@ -317,7 +323,14 @@ export default function ManufacturerBufferPage() {
             ))}
             {!loading && stats?.items.map((item) => (
               <tr key={item.id} className={item.matchedProductId ? "bg-green-50/40" : ""}>
-                <td className="px-4 py-3 font-mono text-xs text-blue-600">{item.ean}</td>
+                <td className="px-4 py-3 font-mono text-xs">
+                  {item.ean
+                    ? <span className="text-blue-600">{item.ean}</span>
+                    : item.internalArticleNr
+                      ? <span className="text-gray-500" title="Interne Artikelnummer">#{item.internalArticleNr}</span>
+                      : <span className="text-gray-300">—</span>
+                  }
+                </td>
                 <td className="px-4 py-3">
                   <div className="font-medium text-gray-900 text-xs">{item.manufacturerName ?? <span className="text-gray-400">—</span>}</div>
                   {item.productName && <div className="text-xs text-gray-500">{item.productName}</div>}
