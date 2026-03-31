@@ -1,14 +1,22 @@
--- Rename sku → ean on Product table
-ALTER TABLE "Product" RENAME COLUMN "sku" TO "ean";
+-- Rename sku → ean on Product table (idempotent: only if sku still exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Product' AND column_name = 'sku'
+  ) THEN
+    ALTER TABLE "Product" RENAME COLUMN "sku" TO "ean";
+  END IF;
+END $$;
 
--- Add Hersteller-Angaben fields
-ALTER TABLE "Product" ADD COLUMN "mfrNetWeightG"   DOUBLE PRECISION;
-ALTER TABLE "Product" ADD COLUMN "mfrGrossWeightG" DOUBLE PRECISION;
-ALTER TABLE "Product" ADD COLUMN "mfrPlasticG"     DOUBLE PRECISION;
-ALTER TABLE "Product" ADD COLUMN "mfrPaperG"       DOUBLE PRECISION;
+-- Add Hersteller-Angaben fields (idempotent)
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrNetWeightG"   DOUBLE PRECISION;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrGrossWeightG" DOUBLE PRECISION;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrPlasticG"     DOUBLE PRECISION;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrPaperG"       DOUBLE PRECISION;
 
--- Create ManufacturerRequest table
-CREATE TABLE "ManufacturerRequest" (
+-- Create ManufacturerRequest table (idempotent)
+CREATE TABLE IF NOT EXISTS "ManufacturerRequest" (
     "id"               TEXT NOT NULL,
     "manufacturerName" TEXT NOT NULL,
     "contactEmail"     TEXT,
@@ -19,8 +27,8 @@ CREATE TABLE "ManufacturerRequest" (
     CONSTRAINT "ManufacturerRequest_pkey" PRIMARY KEY ("id")
 );
 
--- Create ManufacturerRequestItem table
-CREATE TABLE "ManufacturerRequestItem" (
+-- Create ManufacturerRequestItem table (idempotent)
+CREATE TABLE IF NOT EXISTS "ManufacturerRequestItem" (
     "id"        TEXT NOT NULL,
     "requestId" TEXT NOT NULL,
     "productId" TEXT NOT NULL,
@@ -29,18 +37,31 @@ CREATE TABLE "ManufacturerRequestItem" (
     CONSTRAINT "ManufacturerRequestItem_pkey" PRIMARY KEY ("id")
 );
 
--- Unique constraint: one product per request
-CREATE UNIQUE INDEX "ManufacturerRequestItem_requestId_productId_key"
+-- Unique constraint (idempotent)
+CREATE UNIQUE INDEX IF NOT EXISTS "ManufacturerRequestItem_requestId_productId_key"
     ON "ManufacturerRequestItem"("requestId", "productId");
 
-CREATE INDEX "ManufacturerRequestItem_requestId_idx" ON "ManufacturerRequestItem"("requestId");
-CREATE INDEX "ManufacturerRequestItem_productId_idx" ON "ManufacturerRequestItem"("productId");
+CREATE INDEX IF NOT EXISTS "ManufacturerRequestItem_requestId_idx" ON "ManufacturerRequestItem"("requestId");
+CREATE INDEX IF NOT EXISTS "ManufacturerRequestItem_productId_idx" ON "ManufacturerRequestItem"("productId");
 
--- Foreign keys
-ALTER TABLE "ManufacturerRequestItem"
-    ADD CONSTRAINT "ManufacturerRequestItem_requestId_fkey"
-    FOREIGN KEY ("requestId") REFERENCES "ManufacturerRequest"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- Foreign keys (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'ManufacturerRequestItem_requestId_fkey'
+  ) THEN
+    ALTER TABLE "ManufacturerRequestItem"
+      ADD CONSTRAINT "ManufacturerRequestItem_requestId_fkey"
+      FOREIGN KEY ("requestId") REFERENCES "ManufacturerRequest"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
 
-ALTER TABLE "ManufacturerRequestItem"
-    ADD CONSTRAINT "ManufacturerRequestItem_productId_fkey"
-    FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'ManufacturerRequestItem_productId_fkey'
+  ) THEN
+    ALTER TABLE "ManufacturerRequestItem"
+      ADD CONSTRAINT "ManufacturerRequestItem_productId_fkey"
+      FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;

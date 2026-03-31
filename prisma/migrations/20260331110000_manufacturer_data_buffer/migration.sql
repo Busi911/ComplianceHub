@@ -1,5 +1,5 @@
--- CreateTable
-CREATE TABLE "ManufacturerDataBuffer" (
+-- CreateTable (idempotent)
+CREATE TABLE IF NOT EXISTS "ManufacturerDataBuffer" (
     "id" TEXT NOT NULL,
     "ean" TEXT NOT NULL,
     "manufacturerName" TEXT,
@@ -18,12 +18,19 @@ CREATE TABLE "ManufacturerDataBuffer" (
     CONSTRAINT "ManufacturerDataBuffer_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "ManufacturerDataBuffer_ean_idx" ON "ManufacturerDataBuffer"("ean");
+-- CreateIndex (idempotent)
+CREATE INDEX IF NOT EXISTS "ManufacturerDataBuffer_ean_idx" ON "ManufacturerDataBuffer"("ean");
+CREATE INDEX IF NOT EXISTS "ManufacturerDataBuffer_matchedProductId_idx" ON "ManufacturerDataBuffer"("matchedProductId");
 
--- CreateIndex
-CREATE INDEX "ManufacturerDataBuffer_matchedProductId_idx" ON "ManufacturerDataBuffer"("matchedProductId");
-
--- AddForeignKey
-ALTER TABLE "ManufacturerDataBuffer" ADD CONSTRAINT "ManufacturerDataBuffer_matchedProductId_fkey"
-    FOREIGN KEY ("matchedProductId") REFERENCES "Product"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- AddForeignKey (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'ManufacturerDataBuffer_matchedProductId_fkey'
+  ) THEN
+    ALTER TABLE "ManufacturerDataBuffer"
+      ADD CONSTRAINT "ManufacturerDataBuffer_matchedProductId_fkey"
+      FOREIGN KEY ("matchedProductId") REFERENCES "Product"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;

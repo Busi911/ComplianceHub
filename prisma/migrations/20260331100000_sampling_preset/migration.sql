@@ -1,5 +1,5 @@
--- CreateTable
-CREATE TABLE "SamplingPreset" (
+-- CreateTable (idempotent)
+CREATE TABLE IF NOT EXISTS "SamplingPreset" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
