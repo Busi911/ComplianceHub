@@ -140,6 +140,13 @@ const FIELD_MAP: Record<string, string> = {
   "annual units sold": "annualUnitsSold",
   "absatz stk": "annualUnitsSold",
   annualunitssold: "annualUnitsSold",
+  // ── System-ID (permanent record key, used for updates instead of SKU) ────────
+  // normalizeKey strips "(g)"/"(mm)" suffixes, so "System-ID" → "system-id"
+  "system-id": "_systemId",
+  systemid: "_systemId",
+  "system id": "_systemId",
+  "compliancehub-id": "_systemId",
+  "compliance-id": "_systemId",
 };
 
 function normalizeKey(key: string): string {
@@ -161,6 +168,11 @@ function mapRow(row: Record<string, string>): Record<string, string | number | n
     const field = FIELD_MAP[normalized];
     if (field) {
       const trimmed = value?.trim() ?? "";
+      // _systemId is just a lookup key — store as-is (empty = not provided)
+      if (field === "_systemId") {
+        mapped[field] = trimmed || null;
+        continue;
+      }
       if (trimmed === "" || trimmed === "-" || trimmed === "n/a") {
         mapped[field] = null;
       } else if (field === "annualUnitsSold") {
@@ -260,6 +272,7 @@ export async function POST(request: NextRequest) {
     // Build column mapping from actual CSV headers so the UI can show
     // which columns were recognized, which were ignored, and what they map to.
     const FIELD_LABELS: Record<string, string> = {
+      _systemId: "System-ID 🔑",
       sku: "SKU",
       internalArticleNumber: "Interne Art.-Nr.",
       productName: "Produktname",
@@ -305,7 +318,7 @@ export async function POST(request: NextRequest) {
     let errorCount = 0;
 
     // Create import batch record (even for dry run, so we can return batch info)
-    let batch = null;
+    let batch: { id: string } | null = null;
     if (!dryRun) {
       batch = await prisma.importBatch.create({
         data: {
@@ -316,29 +329,33 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    for (let i = 0; i < rows.length; i++) {
-      const rawRow = rows[i];
-      const mapped = mapRow(rawRow);
-      const rowNum = i + 1;
+    // Process rows in parallel batches for speed.
+    // Batching avoids N+1 sequential DB round-trips while preventing DB overload.
+    const BATCH_SIZE = 10;
 
+    type RowResult = (typeof results)[0];
+
+    async function processRow(rawRow: Record<string, string>, rowNum: number): Promise<RowResult> {
+      const mapped = mapRow(rawRow);
       const validation = validateProductInput(mapped as Parameters<typeof validateProductInput>[0]);
 
       if (!validation.isValid) {
         errorCount++;
-        results.push({
+        return {
           row: rowNum,
           sku: (mapped.sku as string) ?? null,
           status: "error",
           errors: validation.errors,
           warnings: validation.warnings,
           data: mapped,
-        });
-        continue;
+        };
       }
 
       if (!dryRun && batch) {
         try {
-          const upsertData = {
+          const systemId = mapped._systemId as string | null;
+
+          const productFields = {
             sku: mapped.sku as string,
             internalArticleNumber: (mapped.internalArticleNumber as string) || null,
             productName: (mapped.productName as string) || "",
@@ -357,70 +374,96 @@ export async function POST(request: NextRequest) {
             grossHeightMm: mapped.grossHeightMm as number | null,
             annualUnitsSold: mapped.annualUnitsSold as number | null,
             source: (mapped.source as string) || null,
-            importBatchId: batch.id,
           };
 
-          const existing = await prisma.product.findUnique({
-            where: { sku: upsertData.sku },
-          });
+          let product: { id: string };
+          let isNew = false;
 
-          const product = await prisma.product.upsert({
-            where: { sku: upsertData.sku },
-            create: upsertData,
-            update: {
-              ...upsertData,
-              // Don't overwrite importBatchId on update to keep original batch
-              importBatchId: existing?.importBatchId ?? batch.id,
-            },
-          });
+          if (systemId) {
+            // ── System-ID path: look up by permanent ID, allow SKU to change ──
+            const existing = await prisma.product.findUnique({ where: { id: systemId } });
+            if (existing) {
+              product = await prisma.product.update({
+                where: { id: systemId },
+                data: {
+                  ...productFields,
+                  // Keep original import batch
+                  importBatchId: existing.importBatchId ?? batch.id,
+                },
+              });
+            } else {
+              // System-ID not found — fall through to SKU-based upsert
+              const ex2 = await prisma.product.findUnique({ where: { sku: productFields.sku } });
+              product = await prisma.product.upsert({
+                where: { sku: productFields.sku },
+                create: { ...productFields, importBatchId: batch.id },
+                update: { ...productFields, importBatchId: ex2?.importBatchId ?? batch.id },
+              });
+              isNew = !ex2;
+            }
+          } else {
+            // ── SKU path (default) ───────────────────────────────────────────
+            const existing = await prisma.product.findUnique({ where: { sku: productFields.sku } });
+            product = await prisma.product.upsert({
+              where: { sku: productFields.sku },
+              create: { ...productFields, importBatchId: batch.id },
+              update: { ...productFields, importBatchId: existing?.importBatchId ?? batch.id },
+            });
+            isNew = !existing;
+          }
 
-          // Create IMPORTED packaging profile if none exists
+          // Ensure packaging profile exists
           await prisma.productPackagingProfile.upsert({
             where: { productId: product.id },
-            create: {
-              productId: product.id,
-              status: PackagingStatus.IMPORTED,
-            },
+            create: { productId: product.id, status: PackagingStatus.IMPORTED },
             update: {},
           });
 
-          // Try to run initial estimation
-          await updateProfileAfterSampling(product.id).catch(() => null);
+          // Estimation: fire-and-forget — don't block the response.
+          // Runs in background; errors are logged but don't fail the import row.
+          updateProfileAfterSampling(product.id).catch(console.error);
 
           successCount++;
-          results.push({
+          return {
             row: rowNum,
-            sku: upsertData.sku,
-            status: existing ? "updated" : "success",
+            sku: productFields.sku,
+            status: isNew ? "success" : "updated",
             errors: [],
             warnings: validation.warnings,
             data: mapped,
-          });
+          };
         } catch (err) {
           errorCount++;
-          results.push({
+          return {
             row: rowNum,
             sku: (mapped.sku as string) ?? null,
             status: "error",
-            errors: [
-              `Database error: ${err instanceof Error ? err.message : "unknown"}`,
-            ],
+            errors: [`Database error: ${err instanceof Error ? err.message : "unknown"}`],
             warnings: [],
             data: mapped,
-          });
+          };
         }
       } else {
         // Dry run
         successCount++;
-        results.push({
+        return {
           row: rowNum,
           sku: (mapped.sku as string) ?? null,
           status: validation.warnings.length > 0 ? "warning" : "success",
           errors: [],
           warnings: validation.warnings,
           data: mapped,
-        });
+        };
       }
+    }
+
+    // Execute in parallel batches
+    for (let batchStart = 0; batchStart < rows.length; batchStart += BATCH_SIZE) {
+      const batchRows = rows.slice(batchStart, batchStart + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batchRows.map((r, idx) => processRow(r, batchStart + idx + 1))
+      );
+      results.push(...batchResults);
     }
 
     // Update batch counts

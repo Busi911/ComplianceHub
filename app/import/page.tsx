@@ -381,6 +381,12 @@ export default function ImportPage() {
                   </span>
                 )}
               </div>
+              {result.columnMappings.some((m) => m.mappedField === "_systemId") && (
+                <div className="mb-2 text-xs bg-purple-50 border border-purple-200 rounded px-3 py-2 text-purple-800">
+                  🔑 <strong>System-ID erkannt</strong> — Datensätze werden per permanenter ID gesucht,
+                  nicht per SKU. Die SKU kann damit korrigiert werden.
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 {result.columnMappings.map((m) => (
                   <div
@@ -389,9 +395,11 @@ export default function ImportPage() {
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
                       !m.mappedField
                         ? "bg-red-50 border-red-200 text-red-700"
-                        : m.mappedField === "grossWeightG"
-                          ? "bg-blue-100 border-blue-300 text-blue-800 font-semibold"
-                          : "bg-green-50 border-green-200 text-green-800"
+                        : m.mappedField === "_systemId"
+                          ? "bg-purple-100 border-purple-300 text-purple-800 font-semibold"
+                          : m.mappedField === "grossWeightG"
+                            ? "bg-blue-100 border-blue-300 text-blue-800 font-semibold"
+                            : "bg-green-50 border-green-200 text-green-800"
                     }`}
                   >
                     <span>{m.csvColumn}</span>
@@ -522,6 +530,20 @@ export default function ImportPage() {
             Felder die in der neuen CSV-Datei fehlen, bleiben unverändert. Leere Felder (leere Zelle)
             setzen den Wert zurück auf leer.
           </p>
+          <div className="bg-purple-50 border border-purple-200 rounded p-3 space-y-1">
+            <p className="font-semibold text-purple-900">🔑 SKU korrigieren via System-ID</p>
+            <p>
+              Um die SKU-Nummer eines bestehenden Datensatzes zu ändern, exportiere die Produkte
+              per CSV (Seite "Produkte → ↓ CSV exportieren"). Die Export-Datei enthält eine
+              Spalte <code>System-ID</code>. Korrigiere die SKU in der Tabelle und importiere
+              die Datei wieder. Das System erkennt die <code>System-ID</code> und sucht den
+              Datensatz damit — die neue SKU wird gesetzt.
+            </p>
+            <p className="text-purple-700 text-xs">
+              Tipp: Du musst nur die geänderten Zeilen importieren. Die System-ID kann auch für
+              Massenaktualisierungen (Kategorien, Marken, Preise) genutzt werden.
+            </p>
+          </div>
         </div>
       </div>
     </div>
