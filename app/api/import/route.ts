@@ -52,6 +52,9 @@ const FIELD_MAP: Record<string, string> = {
   "intern. art.-nr": "internalArticleNumber",
   "artikel nr intern": "internalArticleNumber",
   internalarticlenumber: "internalArticleNumber",
+  // Export-Spaltenname (kein Sonderzeichen, sicheres Mapping)
+  // "InterneArtNr".toLowerCase() = "interneartnr"
+  interneartnr: "internalArticleNumber",
   // ── Names / descriptions ────────────────────────────────────────────────────
   hersteller: "manufacturer",
   manufacturer: "manufacturer",
@@ -275,7 +278,7 @@ export async function POST(request: NextRequest) {
     const FIELD_LABELS: Record<string, string> = {
       _systemId: "System-ID 🔑",
       sku: "SKU",
-      internalArticleNumber: "Interne Art.-Nr. 🔑",
+      internalArticleNumber: "InterneArtNr 🔑",
       productName: "Produktname",
       manufacturer: "Hersteller",
       brand: "Marke",
