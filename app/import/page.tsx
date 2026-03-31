@@ -27,6 +27,7 @@ interface ImportResult {
   results: ImportRow[];
   columnMappings: ColumnMapping[];
   unmappedColumns: string[];
+  detectedDelimiter?: string;
 }
 
 const STATUS_LABEL: Record<ImportRow["status"], string> = {
@@ -367,7 +368,19 @@ export default function ImportPage() {
           {/* Column mapping panel */}
           {result.columnMappings?.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="text-sm font-medium text-gray-700 mb-3">Spalten-Mapping</div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="text-sm font-medium text-gray-700">Spalten-Mapping</div>
+                {result.detectedDelimiter && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-mono ${
+                    result.detectedDelimiter.includes("Semikolon")
+                      ? "bg-green-50 border-green-200 text-green-700"
+                      : "bg-amber-50 border-amber-300 text-amber-700"
+                  }`}>
+                    Trennzeichen: {result.detectedDelimiter}
+                    {result.detectedDelimiter.includes("Komma") && " ⚠ (erwartet: Semikolon)"}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {result.columnMappings.map((m) => (
                   <div

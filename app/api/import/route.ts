@@ -26,21 +26,33 @@ function decodeBuffer(buffer: Buffer): string {
 }
 
 // CSV column → Product field mapping (flexible, case-insensitive)
+// Covers: import template names, export abbreviations, English names, common typos.
+// normalizeKey() strips trailing "(unit)" before lookup, so "Netto-Gewicht (g)" → "netto-gewicht".
 const FIELD_MAP: Record<string, string> = {
+  // ── SKU / article number ────────────────────────────────────────────────────
   sku: "sku",
   "art.-nr": "sku",
   "art.nr": "sku",
   artikelnummer: "sku",
   "artikel-nr": "sku",
+  "lieferanten-art.-nr": "sku",
+  "lieferanten art nr": "sku",
+  "hersteller art nr": "sku",
+  "hersteller-art.-nr": "sku",
+  ean: "sku",
+  gtin: "sku",
+  // ── Internal article number ──────────────────────────────────────────────────
   "interne artikelnummer": "internalArticleNumber",
   "interne art.-nr": "internalArticleNumber",
   "int. art.-nr": "internalArticleNumber",
   "int.art.nr": "internalArticleNumber",
   "interne nr": "internalArticleNumber",
   "interne nr.": "internalArticleNumber",
-  "intern": "internalArticleNumber",
+  intern: "internalArticleNumber",
+  "intern. art.-nr": "internalArticleNumber",
   "artikel nr intern": "internalArticleNumber",
   internalarticlenumber: "internalArticleNumber",
+  // ── Names / descriptions ────────────────────────────────────────────────────
   hersteller: "manufacturer",
   manufacturer: "manufacturer",
   marke: "brand",
@@ -50,44 +62,76 @@ const FIELD_MAP: Record<string, string> = {
   productname: "productName",
   name: "productName",
   bezeichnung: "productName",
+  artikelbezeichnung: "productName",
+  // ── Category ────────────────────────────────────────────────────────────────
   kategorie: "category",
   category: "category",
+  warengruppe: "category",
   unterkategorie: "subcategory",
   subcategory: "subcategory",
+  untergruppe: "subcategory",
+  // ── Price ────────────────────────────────────────────────────────────────────
   "ek-preis": "ekPrice",
   ekpreis: "ekPrice",
   "ek preis": "ekPrice",
   einkaufspreis: "ekPrice",
   ekprice: "ekPrice",
   price: "ekPrice",
+  preis: "ekPrice",
+  // ── Net weight ──────────────────────────────────────────────────────────────
+  // Import template: "Netto-Gewicht (g)" → normalizes to "netto-gewicht"
+  // Export header:   "Nettogewicht (g)"  → normalizes to "nettogewicht"
   "netto-gewicht": "netWeightG",
   nettogewicht: "netWeightG",
   netweight: "netWeightG",
   netweightg: "netWeightG",
   "netto gewicht g": "netWeightG",
+  gewicht: "netWeightG",
+  weight: "netWeightG",
+  // ── Gross weight ─────────────────────────────────────────────────────────────
+  // Import template: "Brutto-Gewicht (g)" → "brutto-gewicht"
+  // Export header:   "Bruttogewicht (g)"  → "bruttogewicht"
   "brutto-gewicht": "grossWeightG",
   bruttogewicht: "grossWeightG",
   grossweight: "grossWeightG",
   grossweightg: "grossWeightG",
   "brutto gewicht g": "grossWeightG",
+  "brutto-gewicht inkl. verpackung": "grossWeightG",
+  // ── Net dimensions ───────────────────────────────────────────────────────────
+  // Import template full names → "netto-länge" etc.
+  // Export abbreviations → "netto l", "netto b", "netto h"
   "netto-länge": "netLengthMm",
   nettolänge: "netLengthMm",
   netlength: "netLengthMm",
+  "netto l": "netLengthMm",   // export abbreviation
+  "nettol": "netLengthMm",
   "netto-breite": "netWidthMm",
   nettobreite: "netWidthMm",
   netwidth: "netWidthMm",
+  "netto b": "netWidthMm",    // export abbreviation
+  "nettob": "netWidthMm",
   "netto-höhe": "netHeightMm",
   nettohöhe: "netHeightMm",
   netheight: "netHeightMm",
+  "netto h": "netHeightMm",   // export abbreviation
+  "nettoh": "netHeightMm",
+  // ── Gross dimensions ─────────────────────────────────────────────────────────
   "brutto-länge": "grossLengthMm",
   bruttolänge: "grossLengthMm",
   grosslength: "grossLengthMm",
+  "brutto l": "grossLengthMm", // export abbreviation
+  "bruttol": "grossLengthMm",
   "brutto-breite": "grossWidthMm",
   bruttobreite: "grossWidthMm",
   grosswidth: "grossWidthMm",
+  "brutto b": "grossWidthMm",  // export abbreviation
+  "bruttob": "grossWidthMm",
   "brutto-höhe": "grossHeightMm",
   bruttohöhe: "grossHeightMm",
   grossheight: "grossHeightMm",
+  "brutto h": "grossHeightMm", // export abbreviation
+  "bruttoh": "grossHeightMm",
+  // ── Other ────────────────────────────────────────────────────────────────────
   quelle: "source",
   source: "source",
   jahresabsatz: "annualUnitsSold",
@@ -160,6 +204,29 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const text = decodeBuffer(Buffer.from(arrayBuffer));
 
+    // Detect delimiter from the first non-empty line.
+    // German Excel saves CSVs with semicolons AND uses commas as decimal separator —
+    // auto-detection with [",",";"] can fail because decimal commas appear in data.
+    // Strategy: count unquoted semicolons vs commas in the header line.
+    // Prefer semicolon (the German locale default) when both appear equally.
+    function detectDelimiter(raw: string): string {
+      const firstLine = raw.split(/\r?\n/).find((l) => l.trim()) ?? "";
+      // Count occurrences outside quoted strings
+      let inQuote = false;
+      let semicolons = 0;
+      let commas = 0;
+      for (const ch of firstLine) {
+        if (ch === '"') { inQuote = !inQuote; continue; }
+        if (inQuote) continue;
+        if (ch === ";") semicolons++;
+        else if (ch === ",") commas++;
+      }
+      // Prefer semicolon; only use comma if zero semicolons and commas present
+      return semicolons > 0 || commas === 0 ? ";" : ",";
+    }
+
+    const delimiter = detectDelimiter(text);
+
     let rows: Record<string, string>[];
     try {
       rows = parse(text, {
@@ -167,7 +234,7 @@ export async function POST(request: NextRequest) {
         skip_empty_lines: true,
         trim: true,
         bom: true,
-        delimiter: [",", ";"],
+        delimiter,
         relax_column_count: true,
       });
     } catch {
@@ -373,6 +440,7 @@ export async function POST(request: NextRequest) {
       results,
       columnMappings,
       unmappedColumns,
+      detectedDelimiter: delimiter === ";" ? "Semikolon (;)" : "Komma (,)",
     });
   } catch (error) {
     console.error("Import error:", error);
