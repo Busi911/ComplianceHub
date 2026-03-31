@@ -480,17 +480,41 @@ export async function POST(request: NextRequest) {
               }
             }
           } else {
-            // ── No System-ID: EAN-based upsert ───────────────────────────────
-            // Update if EAN already exists, create if new. EAN is required.
-            const existingByEan = await prisma.product.findUnique({ where: { ean: productFields.ean } });
+            // ── No System-ID: EAN → InterneArtNr → create ────────────────────
+            const existingByEan = productFields.ean
+              ? await prisma.product.findUnique({ where: { ean: productFields.ean } })
+              : null;
+
             if (existingByEan) {
               product = await prisma.product.update({
                 where: { id: existingByEan.id },
                 data: { ...buildUpdateFields(productFields), importBatchId: existingByEan.importBatchId ?? batch.id },
               });
-            } else {
+            } else if (!productFields.ean && productFields.internalArticleNumber) {
+              // No EAN provided — try to find a unique match by internal article number
+              const byInternal = await prisma.product.findMany({
+                where: { internalArticleNumber: productFields.internalArticleNumber as string },
+                select: { id: true, importBatchId: true, ean: true },
+              });
+              if (byInternal.length === 1) {
+                product = await prisma.product.update({
+                  where: { id: byInternal[0].id },
+                  data: { ...buildUpdateFields(productFields), importBatchId: byInternal[0].importBatchId ?? batch.id },
+                });
+              } else if (byInternal.length > 1) {
+                throw new Error(
+                  `Interne Art.-Nr. „${productFields.internalArticleNumber}" ist nicht eindeutig (${byInternal.length} Treffer) — bitte System-ID oder EAN verwenden`
+                );
+              } else {
+                throw new Error(
+                  `Keine EAN angegeben und Interne Art.-Nr. „${productFields.internalArticleNumber}" nicht gefunden — Zeile übersprungen`
+                );
+              }
+            } else if (productFields.ean) {
               product = await prisma.product.create({ data: { ...productFields, importBatchId: batch.id } });
               isNew = true;
+            } else {
+              throw new Error("Weder EAN noch Interne Art.-Nr. angegeben — Zeile übersprungen");
             }
           }
 
