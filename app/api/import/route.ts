@@ -156,6 +156,7 @@ function normalizeKey(key: string): string {
     .trim()
     .toLowerCase()
     .replace(/\s*\([^)]*\)\s*$/, "") // remove trailing "(...)"
+    .replace(/\.+$/, "")             // remove trailing dots ("Art.-Nr." → "Art.-Nr")
     .replace(/\s+/g, " ")
     .trim();
 }
