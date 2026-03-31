@@ -11,7 +11,7 @@ datasource db {
 
 model Product {
   id                    String   @id @default(cuid())
-  sku                   String   @unique
+  ean                   String   @unique
   internalArticleNumber String?
   manufacturer          String?
   brand                 String?
@@ -27,6 +27,11 @@ model Product {
   grossLengthMm    Float?
   grossWidthMm     Float?
   grossHeightMm    Float?
+  // Hersteller-Angaben (vom Hersteller gelieferte Werte, separat von gemessenen/geschätzten Werten)
+  mfrNetWeightG    Float?   // Hersteller-Angabe: Nettogewicht (g)
+  mfrGrossWeightG  Float?   // Hersteller-Angabe: Bruttogewicht inkl. Verpackung (g)
+  mfrPlasticG      Float?   // Hersteller-Angabe: Kunststoff-Fraktion (g)
+  mfrPaperG        Float?   // Hersteller-Angabe: Papier-/Karton-Fraktion (g)
   annualUnitsSold      Int?
   samplingSkipReason   String?   // null = not skipped; "out_of_stock" | "discontinued" | "other"
   samplingSkippedAt    DateTime?
@@ -40,6 +45,8 @@ model Product {
   samplingRecords  SamplingRecord[]
   estimateHistory  ProductEstimateHistory[]
   auditLogs        AuditLog[]               @relation("ProductAuditLogs")
+  manufacturerRequestItems ManufacturerRequestItem[]
+  manufacturerBufferMatches ManufacturerDataBuffer[]
 
   @@index([category])
   @@index([brand])
@@ -143,6 +150,67 @@ model BrandProfile {
 
   @@unique([entityType, name])
   @@index([name])
+}
+
+model ManufacturerRequest {
+  id               String   @id @default(cuid())
+  manufacturerName String
+  contactEmail     String?
+  status           String   @default("OFFEN")  // OFFEN | GESENDET | BEANTWORTET | GESCHLOSSEN
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  items            ManufacturerRequestItem[]
+}
+
+model ManufacturerRequestItem {
+  id        String   @id @default(cuid())
+  requestId String
+  productId String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  request   ManufacturerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, productId])
+  @@index([requestId])
+  @@index([productId])
+}
+
+// Hersteller senden ihre Artikeldaten vorab mit EAN.
+// Solange der Artikel noch nicht im Sortiment ist, liegen die Daten im Puffer.
+// Sobald ein Produkt mit passender EAN importiert wird, werden die Herstellerdaten automatisch übernommen.
+model ManufacturerDataBuffer {
+  id               String    @id @default(cuid())
+  ean              String
+  manufacturerName String?
+  productName      String?
+  mfrNetWeightG    Float?
+  mfrGrossWeightG  Float?
+  mfrPlasticG      Float?
+  mfrPaperG        Float?
+  extraJson        String?   // alle weiteren CSV-Spalten als JSON
+  sourceFileName   String?
+  matchedProductId String?
+  matchedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  matchedProduct   Product?  @relation(fields: [matchedProductId], references: [id])
+
+  @@index([ean])
+  @@index([matchedProductId])
+}
+
+model SamplingPreset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  productIds  String   // JSON array of product IDs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 enum PackagingStatus {

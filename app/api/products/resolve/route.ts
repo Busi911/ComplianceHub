@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 // POST /api/products/resolve
 // Body: { identifiers: string[] }
-// Each identifier is matched against: sku (exact), internalArticleNumber (exact), then productName (icontains)
+// Each identifier is matched against: ean (exact), internalArticleNumber (exact), then productName (icontains)
 // Returns: { resolved: Product[], unresolved: string[] }
 export async function POST(request: NextRequest) {
   try {
@@ -20,12 +20,12 @@ export async function POST(request: NextRequest) {
     const unique = [...new Set(identifiers.map((s) => String(s).trim()).filter(Boolean))];
 
     // Fetch candidates in one query per strategy to avoid N+1
-    // Strategy 1: exact SKU match
-    const bySku = await prisma.product.findMany({
-      where: { sku: { in: unique } },
+    // Strategy 1: exact EAN match
+    const byEan = await prisma.product.findMany({
+      where: { ean: { in: unique } },
       select: {
         id: true,
-        sku: true,
+        ean: true,
         internalArticleNumber: true,
         productName: true,
         manufacturer: true,
@@ -41,11 +41,11 @@ export async function POST(request: NextRequest) {
     const byInternal = await prisma.product.findMany({
       where: {
         internalArticleNumber: { in: unique },
-        id: { notIn: bySku.map((p) => p.id) },
+        id: { notIn: byEan.map((p) => p.id) },
       },
       select: {
         id: true,
-        sku: true,
+        ean: true,
         internalArticleNumber: true,
         productName: true,
         manufacturer: true,
@@ -57,17 +57,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const foundById = new Map<string, (typeof bySku)[0]>();
-    for (const p of [...bySku, ...byInternal]) foundById.set(p.id, p);
+    const foundById = new Map<string, (typeof byEan)[0]>();
+    for (const p of [...byEan, ...byInternal]) foundById.set(p.id, p);
 
     // Build result: for each identifier, find the best match
-    const resolved: Array<{ identifier: string; product: (typeof bySku)[0] }> = [];
+    const resolved: Array<{ identifier: string; product: (typeof byEan)[0] }> = [];
     const unresolved: string[] = [];
 
     for (const identifier of unique) {
-      const bySkuMatch = bySku.find((p) => p.sku === identifier);
-      if (bySkuMatch) {
-        resolved.push({ identifier, product: bySkuMatch });
+      const byEanMatch = byEan.find((p) => p.ean === identifier);
+      if (byEanMatch) {
+        resolved.push({ identifier, product: byEanMatch });
         continue;
       }
       const byInternalMatch = byInternal.find((p) => p.internalArticleNumber === identifier);
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
           },
           select: {
             id: true,
-            sku: true,
+            ean: true,
             internalArticleNumber: true,
             productName: true,
             manufacturer: true,

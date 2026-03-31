@@ -35,7 +35,7 @@ interface EstimateHistory {
 
 interface Product {
   id: string;
-  sku: string;
+  ean: string;
   internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
@@ -52,6 +52,10 @@ interface Product {
   grossWidthMm: number | null;
   grossHeightMm: number | null;
   annualUnitsSold: number | null;
+  mfrNetWeightG: number | null;
+  mfrGrossWeightG: number | null;
+  mfrPlasticG: number | null;
+  mfrPaperG: number | null;
   source: string | null;
   createdAt: string;
   updatedAt: string;
@@ -149,6 +153,10 @@ type EditFormData = {
   grossHeightMm: string;
   annualUnitsSold: string;
   source: string;
+  mfrNetWeightG: string;
+  mfrGrossWeightG: string;
+  mfrPlasticG: string;
+  mfrPaperG: string;
 };
 
 type SamplingFormData = {
@@ -180,6 +188,10 @@ function productToForm(p: Product): EditFormData {
     grossHeightMm: p.grossHeightMm != null ? String(p.grossHeightMm) : "",
     annualUnitsSold: p.annualUnitsSold != null ? String(p.annualUnitsSold) : "",
     source: p.source ?? "",
+    mfrNetWeightG: p.mfrNetWeightG != null ? String(p.mfrNetWeightG) : "",
+    mfrGrossWeightG: p.mfrGrossWeightG != null ? String(p.mfrGrossWeightG) : "",
+    mfrPlasticG: p.mfrPlasticG != null ? String(p.mfrPlasticG) : "",
+    mfrPaperG: p.mfrPaperG != null ? String(p.mfrPaperG) : "",
   };
 }
 
@@ -325,7 +337,7 @@ export default function ProductDetailPage() {
   }
 
   const quality = computeDataQuality({
-    sku: product.sku,
+    ean: product.ean,
     productName: product.productName,
     manufacturer: product.manufacturer ?? undefined,
     brand: product.brand ?? undefined,
@@ -350,7 +362,7 @@ export default function ProductDetailPage() {
           <Link href="/products" className="text-sm text-gray-500 hover:text-gray-700">← Produkte</Link>
           <h1 className="text-xl font-bold text-gray-900 mt-1">{product.productName}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <span className="font-mono text-sm text-gray-500">{product.sku}</span>
+            <span className="font-mono text-sm text-gray-500">{product.ean}</span>
             {product.packagingProfile && <StatusBadge status={product.packagingProfile.status} />}
             {saveSuccess && <span className="text-xs text-green-600">✓ Gespeichert</span>}
           </div>
@@ -405,6 +417,15 @@ export default function ProductDetailPage() {
               <InputField label="Jahresabsatz (Stk.)" name="annualUnitsSold" value={editForm.annualUnitsSold} onChange={handleEditChange} type="number" placeholder="z. B. 500" />
               <InputField label="Quelle" name="source" value={editForm.source} onChange={handleEditChange} placeholder="z. B. ERP-Export" />
             </div>
+            <div className="pt-2 border-t border-amber-100">
+              <div className="text-xs font-semibold text-amber-700 mb-2">🏭 Hersteller-Angaben</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <InputField label="Hersteller-Nettogewicht (g)" name="mfrNetWeightG" value={editForm.mfrNetWeightG} onChange={handleEditChange} type="number" />
+                <InputField label="Hersteller-Bruttogewicht (g)" name="mfrGrossWeightG" value={editForm.mfrGrossWeightG} onChange={handleEditChange} type="number" />
+                <InputField label="Hersteller-Kunststoff (g)" name="mfrPlasticG" value={editForm.mfrPlasticG} onChange={handleEditChange} type="number" />
+                <InputField label="Hersteller-Papier (g)" name="mfrPaperG" value={editForm.mfrPaperG} onChange={handleEditChange} type="number" />
+              </div>
+            </div>
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
@@ -446,7 +467,7 @@ export default function ProductDetailPage() {
             <button onClick={openEdit} className="text-xs text-blue-600 hover:underline">Bearbeiten</button>
           </div>
           <dl className="grid grid-cols-2 gap-3">
-            <Field label="SKU" value={product.sku} mono />
+            <Field label="EAN" value={product.ean} mono />
             <Field label="Interne Art.-Nr." value={product.internalArticleNumber} mono />
             <Field label="Produktname" value={product.productName} />
             <Field label="Hersteller" value={product.manufacturer} />
@@ -478,6 +499,19 @@ export default function ProductDetailPage() {
             <Field label="Netto L×B×H (mm)" value={product.netLengthMm ? `${product.netLengthMm}×${product.netWidthMm}×${product.netHeightMm}` : null} mono />
             <Field label="Brutto L×B×H (mm)" value={product.grossLengthMm ? `${product.grossLengthMm}×${product.grossWidthMm}×${product.grossHeightMm}` : null} mono />
           </dl>
+          {(product.mfrNetWeightG != null || product.mfrGrossWeightG != null || product.mfrPlasticG != null || product.mfrPaperG != null) && (
+            <div className="mt-4 pt-3 border-t border-amber-100">
+              <div className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1">
+                🏭 Hersteller-Angaben
+              </div>
+              <dl className="grid grid-cols-2 gap-3">
+                <Field label="Hersteller-Nettogewicht" value={product.mfrNetWeightG != null ? fmt(product.mfrNetWeightG) : "—"} mono />
+                <Field label="Hersteller-Bruttogewicht" value={product.mfrGrossWeightG != null ? fmt(product.mfrGrossWeightG) : "—"} mono />
+                <Field label="Hersteller-Kunststoff" value={product.mfrPlasticG != null ? fmt(product.mfrPlasticG) : "—"} mono />
+                <Field label="Hersteller-Papier" value={product.mfrPaperG != null ? fmt(product.mfrPaperG) : "—"} mono />
+              </dl>
+            </div>
+          )}
         </div>
       </div>
 

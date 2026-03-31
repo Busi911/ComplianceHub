@@ -24,7 +24,7 @@ export async function GET(
           : { manufacturer: name },
       select: {
         id: true,
-        sku: true,
+        ean: true,
         productName: true,
         category: true,
         subcategory: true,

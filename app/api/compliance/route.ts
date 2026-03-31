@@ -9,7 +9,7 @@ export async function GET() {
     const products = await prisma.product.findMany({
       select: {
         id: true,
-        sku: true,
+        ean: true,
         productName: true,
         category: true,
         annualUnitsSold: true,
@@ -147,7 +147,7 @@ export async function GET() {
       .slice(0, 15)
       .map((p) => ({
         id: p.id,
-        sku: p.sku,
+        ean: p.ean,
         productName: p.productName,
         category: p.category,
         missingSales: !p.annualUnitsSold || p.annualUnitsSold <= 0,

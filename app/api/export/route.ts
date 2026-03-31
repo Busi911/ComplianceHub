@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       where,
       select: {
         id: true,
-        sku: true,
+        ean: true,
         internalArticleNumber: true,
         productName: true,
         manufacturer: true,
@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
         grossLengthMm: true,
         grossWidthMm: true,
         grossHeightMm: true,
+        mfrNetWeightG: true,
+        mfrGrossWeightG: true,
+        mfrPlasticG: true,
+        mfrPaperG: true,
         annualUnitsSold: true,
         source: true,
         // Only select the specific profile fields used in the CSV (not the entire model)
@@ -74,10 +78,10 @@ export async function GET(request: NextRequest) {
     let csv: string;
 
     if (mode === "slim") {
-      // Compact export: only the 17 import-relevant columns
+      // Compact export: only the import-relevant columns
       // Ideal for bulk corrections — smaller file, faster to open in Excel
       const headers = [
-        "SKU",
+        "EAN",
         "InterneArtNr",
         "Produktname",
         "Hersteller",
@@ -87,19 +91,23 @@ export async function GET(request: NextRequest) {
         "EK-Preis (EUR)",
         "Netto-Gewicht (g)",
         "Brutto-Gewicht (g)",
-        "Netto-Länge (mm)",
+        "Netto-Laenge (mm)",
         "Netto-Breite (mm)",
-        "Netto-Höhe (mm)",
-        "Brutto-Länge (mm)",
+        "Netto-Hoehe (mm)",
+        "Brutto-Laenge (mm)",
         "Brutto-Breite (mm)",
-        "Brutto-Höhe (mm)",
+        "Brutto-Hoehe (mm)",
         "Jahresabsatz (Stk.)",
         "System-ID",
+        "Hersteller-Nettogewicht (g)",
+        "Hersteller-Bruttogewicht (g)",
+        "Hersteller-Kunststoff (g)",
+        "Hersteller-Papier (g)",
       ];
       const lines = [row(headers)];
       for (const p of products) {
         lines.push(row([
-          p.sku,
+          p.ean,
           p.internalArticleNumber,
           p.productName,
           p.manufacturer,
@@ -117,13 +125,17 @@ export async function GET(request: NextRequest) {
           p.grossHeightMm,
           p.annualUnitsSold,
           p.id,
+          p.mfrNetWeightG,
+          p.mfrGrossWeightG,
+          p.mfrPlasticG,
+          p.mfrPaperG,
         ]));
       }
       csv = bom + lines.join("\r\n");
     } else {
       // Full export: all columns including packaging/estimation data
       const headers = [
-        "SKU",
+        "EAN",
         "InterneArtNr",
         "Produktname",
         "Hersteller",
@@ -133,23 +145,27 @@ export async function GET(request: NextRequest) {
         "EK-Preis (EUR)",
         "Netto-Gewicht (g)",
         "Brutto-Gewicht (g)",
-        "Netto-Länge (mm)",
+        "Netto-Laenge (mm)",
         "Netto-Breite (mm)",
-        "Netto-Höhe (mm)",
-        "Brutto-Länge (mm)",
+        "Netto-Hoehe (mm)",
+        "Brutto-Laenge (mm)",
         "Brutto-Breite (mm)",
-        "Brutto-Höhe (mm)",
+        "Brutto-Hoehe (mm)",
         "Jahresabsatz (Stk.)",
         "System-ID",
+        "Hersteller-Nettogewicht (g)",
+        "Hersteller-Bruttogewicht (g)",
+        "Hersteller-Kunststoff (g)",
+        "Hersteller-Papier (g)",
         "Status",
         "Kunststoff aktuell (g)",
         "Papier aktuell (g)",
-        "Kunststoff geschätzt (g)",
-        "Papier geschätzt (g)",
+        "Kunststoff geschaetzt (g)",
+        "Papier geschaetzt (g)",
         "Kunststoff gemessen (g)",
         "Papier gemessen (g)",
         "Konfidenz (%)",
-        "Schätzmethode",
+        "Schaetzmethode",
         "Anzahl Stichproben",
         "Quelle",
       ];
@@ -158,7 +174,7 @@ export async function GET(request: NextRequest) {
         const pp = (p as typeof p & { packagingProfile?: { status: string; currentPlasticG: number | null; currentPaperG: number | null; estimatedPlasticG: number | null; estimatedPaperG: number | null; measuredPlasticG: number | null; measuredPaperG: number | null; confidenceScore: number | null; estimationMethod: string | null } | null }).packagingProfile;
         const count = (p as typeof p & { _count?: { samplingRecords: number } })._count;
         lines.push(row([
-          p.sku,
+          p.ean,
           p.internalArticleNumber,
           p.productName,
           p.manufacturer,
@@ -176,6 +192,10 @@ export async function GET(request: NextRequest) {
           p.grossHeightMm,
           p.annualUnitsSold,
           p.id,
+          p.mfrNetWeightG,
+          p.mfrGrossWeightG,
+          p.mfrPlasticG,
+          p.mfrPaperG,
           pp?.status ?? "",
           pp?.currentPlasticG,
           pp?.currentPaperG,

@@ -15,7 +15,7 @@ interface CategoryRow {
 
 interface MissingRow {
   id: string;
-  sku: string;
+  ean: string;
   productName: string;
   category: string | null;
   missingSales: boolean;
@@ -340,7 +340,7 @@ export default function CompliancePage() {
                     {p.productName}
                   </Link>
                   <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
-                    <span className="font-mono">{p.sku}</span>
+                    <span className="font-mono">{p.ean}</span>
                     {p.category && <span>· {p.category}</span>}
                   </div>
                 </div>

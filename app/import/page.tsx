@@ -5,7 +5,7 @@ import Link from "next/link";
 
 interface ImportRow {
   row: number;
-  sku: string | null;
+  ean: string | null;
   status: "success" | "updated" | "error" | "warning";
   errors: string[];
   warnings: string[];
@@ -44,12 +44,12 @@ const STATUS_COLOR: Record<ImportRow["status"], string> = {
   error: "text-red-700 bg-red-50",
 };
 
-const SAMPLE_CSV = `SKU;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis (EUR);Netto-Gewicht (g);Brutto-Gewicht (g);Netto-Länge (mm);Netto-Breite (mm);Netto-Höhe (mm);Brutto-Länge (mm);Brutto-Breite (mm);Brutto-Höhe (mm);Jahresabsatz (Stk.)
-WD-HDD-001;ART-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32;250
-SAM-SSD-002;ART-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15;500
-LG-MON-003;ART-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120;80
-LOG-MOU-004;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehör;Maus;65.00;141;182;128;85;44;152;102;65;150
-TPL-CAB-005;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehör;Kabel;3.50;45;80;200;10;5;210;120;30;1200`;
+const SAMPLE_CSV = `EAN;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;Unterkategorie;EK-Preis (EUR);Netto-Gewicht (g);Brutto-Gewicht (g);Netto-Laenge (mm);Netto-Breite (mm);Netto-Hoehe (mm);Brutto-Laenge (mm);Brutto-Breite (mm);Brutto-Hoehe (mm);Jahresabsatz (Stk.)
+4005209268968;ART-001;WD Blue 1TB HDD;Western Digital;WD;Festplatte;2.5 Zoll;38.90;400;520;146;101;20;165;118;32;250
+8806090231025;ART-002;Samsung 870 EVO 500GB;Samsung;Samsung;Festplatte;SSD 2.5;55.00;58;90;100;70;7;120;88;15;500
+8806098234820;ART-003;LG 27UK850 Monitor;LG;LG;Monitor;27 Zoll;320.00;5400;6200;625;368;56;680;400;120;80
+5099206069497;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehoer;Maus;65.00;141;182;128;85;44;152;102;65;150
+6935364084813;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehoer;Kabel;3.50;45;80;200;10;5;210;120;30;1200`;
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -253,7 +253,7 @@ export default function ImportPage() {
         {/* Field mapping info */}
         <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
           <strong className="text-gray-700">Unterstützte Spalten:</strong>{" "}
-          SKU / Art.-Nr., Interne Art.-Nr., Produktname / Bezeichnung,
+          EAN / GTIN / Art.-Nr., Interne Art.-Nr., Produktname / Bezeichnung,
           Hersteller, Marke / Brand, Kategorie, Unterkategorie,
           EK-Preis (EUR), Netto-Gewicht (g), Brutto-Gewicht (g),
           Netto/Brutto L/B/H (mm). Einheiten in Klammern in der
@@ -392,7 +392,7 @@ export default function ImportPage() {
               {result.columnMappings.some((m) => m.mappedField === "_systemId") && (
                 <div className="mb-2 text-xs bg-purple-50 border border-purple-200 rounded px-3 py-2 text-purple-800">
                   🔑 <strong>System-ID erkannt</strong> — Datensätze werden per permanenter ID gesucht,
-                  nicht per SKU. Die SKU kann damit korrigiert werden.
+                  nicht per EAN. Die EAN kann damit korrigiert werden.
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
@@ -447,7 +447,7 @@ export default function ImportPage() {
                       #
                     </th>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">
-                      SKU
+                      EAN
                     </th>
                     <th className="px-3 py-2 text-left font-medium text-gray-600">
                       Produktname
@@ -467,7 +467,7 @@ export default function ImportPage() {
                         {row.row}
                       </td>
                       <td className="px-3 py-2 font-mono">
-                        {row.sku ?? "—"}
+                        {row.ean ?? "—"}
                       </td>
                       <td className="px-3 py-2 text-gray-600">
                         {(row.data.productName as string) ?? "—"}
@@ -511,7 +511,7 @@ export default function ImportPage() {
         </h2>
         <div className="text-sm text-gray-600 space-y-2">
           <p>
-            <strong>Pflichtfelder:</strong> SKU, Produktname — alle anderen Felder sind optional,
+            <strong>Pflichtfelder:</strong> EAN, Produktname — alle anderen Felder sind optional,
             beeinflussen aber die Datenqualität und Schätzgenauigkeit erheblich.
           </p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs space-y-1">
@@ -534,21 +534,22 @@ export default function ImportPage() {
             <strong>Encoding:</strong> UTF-8 oder UTF-8 mit BOM wird empfohlen (Standard-Excel-Export).
           </p>
           <p>
-            <strong>Re-Import / Upsert:</strong> Bestehende Produkte werden per SKU abgeglichen.
-            Felder die in der neuen CSV-Datei fehlen, bleiben unverändert. Leere Felder (leere Zelle)
-            setzen den Wert zurück auf leer.
+            <strong>Neuer Artikel vs. Aktualisierung:</strong> Enthält eine Zeile eine
+            <code>System-ID</code>, wird der bestehende Datensatz mit dieser ID aktualisiert.
+            Ohne System-ID wird immer ein neuer Artikel angelegt.
+            Felder die in der CSV fehlen, bleiben bei Updates unverändert.
           </p>
           <div className="bg-purple-50 border border-purple-200 rounded p-3 space-y-1">
-            <p className="font-semibold text-purple-900">🔑 SKU korrigieren via System-ID</p>
+            <p className="font-semibold text-purple-900">🔑 EAN korrigieren via System-ID</p>
             <p>
-              Um die SKU-Nummer eines bestehenden Datensatzes zu ändern, exportiere die Produkte
-              per CSV (Seite "Produkte → ↓ CSV exportieren"). Die Export-Datei enthält eine
-              Spalte <code>System-ID</code>. Korrigiere die SKU in der Tabelle und importiere
+              Um die EAN eines bestehenden Datensatzes zu ändern, exportiere die Produkte
+              per CSV (Seite &quot;Produkte → ↓ CSV exportieren&quot;). Die Export-Datei enthält eine
+              Spalte <code>System-ID</code>. Korrigiere die EAN in der Tabelle und importiere
               die Datei wieder. Das System erkennt die <code>System-ID</code> und sucht den
-              Datensatz damit — die neue SKU wird gesetzt.
+              Datensatz damit — die neue EAN wird gesetzt.
             </p>
             <p className="text-purple-700 text-xs">
-              Tipp: Du musst nur die geänderten Zeilen importieren. Die System-ID kann auch für
+              Tipp: Nur geänderte Zeilen müssen importiert werden. Die System-ID kann auch für
               Massenaktualisierungen (Kategorien, Marken, Preise) genutzt werden.
             </p>
           </div>
