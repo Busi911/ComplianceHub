@@ -76,19 +76,21 @@ function ProductsPageInner() {
     if (minSamples) params.set("minSamples", minSamples);
     params.set("page", page.toString());
 
-    fetch(`/api/products?${params.toString()}`)
+    const controller = new AbortController();
+    fetch(`/api/products?${params.toString()}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);
         setData(d);
         setError(null);
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => { if (e.name !== "AbortError") setError(e.message); })
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [search, category, brand, status, minSamples, page]);
 
   useEffect(() => {
-    fetchProducts();
+    return fetchProducts();
   }, [fetchProducts]);
 
   function setParam(key: string, value: string) {
