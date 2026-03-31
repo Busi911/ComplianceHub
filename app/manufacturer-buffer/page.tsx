@@ -112,6 +112,20 @@ export default function ManufacturerBufferPage() {
     fetchData();
   }
 
+  function downloadTemplate() {
+    const bom = "\uFEFF";
+    const header = "EAN;Hersteller;Produktname;Netto-Gewicht;Brutto-Gewicht;Kunststoff;Papier";
+    const example = "4012345678901;Muster GmbH;Beispiel-Artikel 500ml;320;450;15.5;8";
+    const csv = bom + [header, example].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hersteller_vorlage.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const totalPages = stats ? Math.ceil(stats.total / stats.pageSize) : 1;
 
   return (
@@ -147,16 +161,30 @@ export default function ManufacturerBufferPage() {
       {/* Upload */}
       <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
         <h2 className="font-semibold text-gray-800">Hersteller-CSV hochladen</h2>
-        <p className="text-sm text-gray-500">
-          CSV mit mindestens einer <code className="bg-gray-100 px-1 rounded">EAN</code>-Spalte.
-          Optionale Spalten: <code className="bg-gray-100 px-1 rounded">Produktname</code>,{" "}
-          <code className="bg-gray-100 px-1 rounded">Hersteller</code>,{" "}
-          <code className="bg-gray-100 px-1 rounded">Netto-Gewicht</code>,{" "}
-          <code className="bg-gray-100 px-1 rounded">Brutto-Gewicht</code>,{" "}
-          <code className="bg-gray-100 px-1 rounded">Kunststoff</code>,{" "}
-          <code className="bg-gray-100 px-1 rounded">Papier</code>.
-          Alle Gewichte in Gramm. Semikolon oder Komma als Trennzeichen.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2 text-sm text-gray-500">
+            <p>
+              Pflichtfeld: <code className="bg-gray-100 px-1 rounded">EAN</code>.
+              Alle anderen Felder sind <strong>optional</strong> — leere Zellen werden einfach ignoriert.
+            </p>
+            <p>
+              Mögliche Spalten:{" "}
+              <code className="bg-gray-100 px-1 rounded">Hersteller</code>,{" "}
+              <code className="bg-gray-100 px-1 rounded">Produktname</code>,{" "}
+              <code className="bg-gray-100 px-1 rounded">Netto-Gewicht</code>,{" "}
+              <code className="bg-gray-100 px-1 rounded">Brutto-Gewicht</code>,{" "}
+              <code className="bg-gray-100 px-1 rounded">Kunststoff</code>,{" "}
+              <code className="bg-gray-100 px-1 rounded">Papier</code> — alle Gewichte in Gramm.
+              Semikolon oder Komma als Trennzeichen, UTF-8 oder Windows-1252.
+            </p>
+          </div>
+          <button
+            onClick={downloadTemplate}
+            className="flex-shrink-0 text-sm border border-gray-300 text-gray-600 px-3 py-1.5 rounded hover:bg-gray-50 whitespace-nowrap"
+          >
+            ↓ Vorlage-CSV herunterladen
+          </button>
+        </div>
 
         <form onSubmit={handleUpload} className="space-y-3">
           <div className="flex flex-wrap gap-3 items-end">

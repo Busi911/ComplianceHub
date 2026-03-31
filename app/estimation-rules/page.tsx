@@ -33,6 +33,7 @@ function CorrCell({ r }: { r: number | null }) {
 export default function EstimationRulesPage() {
   const [stats, setStats] = useState<{ categories: CategoryCorrelation[]; computedAt: string } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [corrTab, setCorrTab] = useState<"plastic" | "paper">("plastic");
 
   useEffect(() => {
     fetch("/api/stats/correlations")
@@ -146,18 +147,34 @@ export default function EstimationRulesPage() {
 
       {/* Live correlation statistics */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h2 className="font-semibold text-gray-900">Live-Korrelationsanalyse</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Pearson-r zwischen Produktmerkmalen und Kunststoffgewicht — automatisch aus Messdaten berechnet
+              Pearson-r zwischen Produktmerkmalen und Verpackungsgewichten — automatisch aus Messdaten berechnet
             </p>
           </div>
-          {stats?.computedAt && (
-            <span className="text-xs text-gray-400">
-              Stand: {new Date(stats.computedAt).toLocaleTimeString("de-DE")}
-            </span>
-          )}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {stats?.computedAt && (
+              <span className="text-xs text-gray-400">
+                Stand: {new Date(stats.computedAt).toLocaleTimeString("de-DE")}
+              </span>
+            )}
+            <div className="flex rounded border border-gray-300 overflow-hidden text-xs">
+              <button
+                onClick={() => setCorrTab("plastic")}
+                className={`px-3 py-1.5 transition-colors ${corrTab === "plastic" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                Kunststoff
+              </button>
+              <button
+                onClick={() => setCorrTab("paper")}
+                className={`px-3 py-1.5 border-l border-gray-300 transition-colors ${corrTab === "paper" ? "bg-green-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                Papier / Pappe
+              </button>
+            </div>
+          </div>
         </div>
 
         {statsLoading && (
@@ -183,71 +200,115 @@ export default function EstimationRulesPage() {
               <span className="text-gray-300">— zu wenig Daten</span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-left border-b border-gray-200">
-                    <th className="px-3 py-2 font-medium text-gray-600">Kategorie</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right">n</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right">Bruttogew.→Plastik</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Nettogew.→Plastik</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell">EK-Preis→Plastik</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right hidden lg:table-cell">Volumen→Plastik</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right hidden lg:table-cell">Gew.→Papier</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-center">Regression</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell" title="Variationskoeffizient = Streuung der Plastikwerte">CV%</th>
-                    <th className="px-3 py-2 font-medium text-gray-600 text-right">Ausreißer</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {stats.categories.map((cat) => (
-                    <tr key={cat.category} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-800 text-sm">{cat.category}</td>
-                      <td className="px-3 py-2 text-right text-xs text-gray-500">{cat.n}</td>
-                      <CorrCell r={cat.correlations.grossWeightVsPlastic} />
-                      <CorrCell r={cat.correlations.netWeightVsPlastic} />
-                      <CorrCell r={cat.correlations.ekPriceVsPlastic} />
-                      <CorrCell r={cat.correlations.volumeVsPlastic} />
-                      <CorrCell r={cat.correlations.grossWeightVsPaper} />
-                      <td className="px-3 py-2 text-center">
-                        {cat.regressionPlastic ? (
-                          cat.regressionPlastic.usable ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 font-medium">
-                              aktiv · r²={cat.regressionPlastic.r2}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">
-                              r²={cat.regressionPlastic.r2}
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-xs text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs hidden md:table-cell">
-                        {cat.cvPlastic !== null ? (
-                          <span className={
-                            cat.cvPlastic > 50 ? "text-red-600 font-medium" :
-                            cat.cvPlastic > 25 ? "text-yellow-600" : "text-green-600"
-                          }>
-                            {cat.cvPlastic}%
-                          </span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs">
-                        {cat.outlierCount > 0 ? (
-                          <span className="text-orange-600 font-medium">{cat.outlierCount}</span>
-                        ) : <span className="text-gray-300">0</span>}
-                      </td>
+            {corrTab === "plastic" && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left border-b border-gray-200">
+                      <th className="px-3 py-2 font-medium text-gray-600">Kategorie</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right">n</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right">Bruttogew.→Plastik</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Nettogew.→Plastik</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell">EK-Preis→Plastik</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right hidden lg:table-cell">Volumen→Plastik</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-center">Regression</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell" title="Variationskoeffizient">CV%</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right">Ausreißer</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.categories.map((cat) => (
+                      <tr key={cat.category} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-800 text-sm">{cat.category}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">{cat.n}</td>
+                        <CorrCell r={cat.correlations.grossWeightVsPlastic} />
+                        <CorrCell r={cat.correlations.netWeightVsPlastic} />
+                        <CorrCell r={cat.correlations.ekPriceVsPlastic} />
+                        <CorrCell r={cat.correlations.volumeVsPlastic} />
+                        <td className="px-3 py-2 text-center">
+                          {cat.regressionPlastic ? (
+                            cat.regressionPlastic.usable ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 font-medium">
+                                aktiv · r²={cat.regressionPlastic.r2}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">r²={cat.regressionPlastic.r2}</span>
+                            )
+                          ) : <span className="text-xs text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs hidden md:table-cell">
+                          {cat.cvPlastic !== null ? (
+                            <span className={cat.cvPlastic > 50 ? "text-red-600 font-medium" : cat.cvPlastic > 25 ? "text-yellow-600" : "text-green-600"}>
+                              {cat.cvPlastic}%
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs">
+                          {cat.outlierCount > 0 ? <span className="text-orange-600 font-medium">{cat.outlierCount}</span> : <span className="text-gray-300">0</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {corrTab === "paper" && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left border-b border-gray-200">
+                      <th className="px-3 py-2 font-medium text-gray-600">Kategorie</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right">n</th>
+                      <th className="px-3 py-2 font-medium text-green-700 text-right">Bruttogew.→Papier</th>
+                      <th className="px-3 py-2 font-medium text-green-700 text-right hidden md:table-cell">Nettogew.→Papier</th>
+                      <th className="px-3 py-2 font-medium text-green-700 text-right hidden md:table-cell">EK-Preis→Papier</th>
+                      <th className="px-3 py-2 font-medium text-green-700 text-right hidden lg:table-cell">Volumen→Papier</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-center">Regression</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell" title="Variationskoeffizient">CV%</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 text-right">Ausreißer</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.categories.map((cat) => (
+                      <tr key={cat.category} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-800 text-sm">{cat.category}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">{cat.n}</td>
+                        <CorrCell r={cat.correlations.grossWeightVsPaper} />
+                        <CorrCell r={cat.correlations.netWeightVsPaper} />
+                        <CorrCell r={cat.correlations.ekPriceVsPaper} />
+                        <CorrCell r={cat.correlations.volumeVsPaper} />
+                        <td className="px-3 py-2 text-center">
+                          {cat.regressionPaper ? (
+                            cat.regressionPaper.usable ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-green-100 text-green-800 font-medium">
+                                aktiv · r²={cat.regressionPaper.r2}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">r²={cat.regressionPaper.r2}</span>
+                            )
+                          ) : <span className="text-xs text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs hidden md:table-cell">
+                          {cat.cvPaper !== null ? (
+                            <span className={cat.cvPaper > 50 ? "text-red-600 font-medium" : cat.cvPaper > 25 ? "text-yellow-600" : "text-green-600"}>
+                              {cat.cvPaper}%
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs">
+                          {cat.outlierCount > 0 ? <span className="text-orange-600 font-medium">{cat.outlierCount}</span> : <span className="text-gray-300">0</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-gray-500 border-t border-gray-100 pt-3">
-              <div><strong className="text-gray-700">Regression aktiv:</strong> Wird für Schätzungen genutzt wenn r² ≥ 0,40 und n ≥ 5. Verbessert Schätzungen durch gewichtsbasierte Vorhersage.</div>
-              <div><strong className="text-gray-700">CV (Variationskoeffizient):</strong> Relative Streuung der Plastikwerte. &gt;50% = heterogene Kategorie, Schätzungen unzuverlässiger.</div>
+              <div><strong className="text-gray-700">Regression aktiv:</strong> Wird für Schätzungen genutzt wenn r² ≥ 0,40 und n ≥ 5.</div>
+              <div><strong className="text-gray-700">CV (Variationskoeffizient):</strong> Relative Streuung der Werte. &gt;50% = heterogene Kategorie, Schätzungen unzuverlässiger.</div>
               <div><strong className="text-gray-700">Ausreißer:</strong> Statistisch auffällige Messungen (IQR + Z-Score). Werden aus allen Berechnungen ausgeschlossen.</div>
             </div>
           </>

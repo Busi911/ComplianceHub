@@ -103,6 +103,8 @@ const FIELD_MAP: Record<string, string> = {
   // ── Net dimensions ───────────────────────────────────────────────────────────
   "netto-länge": "netLengthMm",
   nettolänge: "netLengthMm",
+  "netto-laenge": "netLengthMm",   // ASCII-Schreibweise (kein Umlaut)
+  nettolaenge: "netLengthMm",
   netlength: "netLengthMm",
   "netto l": "netLengthMm",
   nettol: "netLengthMm",
@@ -113,12 +115,16 @@ const FIELD_MAP: Record<string, string> = {
   nettob: "netWidthMm",
   "netto-höhe": "netHeightMm",
   nettohöhe: "netHeightMm",
+  "netto-hoehe": "netHeightMm",    // ASCII-Schreibweise
+  nettohoehe: "netHeightMm",
   netheight: "netHeightMm",
   "netto h": "netHeightMm",
   nettoh: "netHeightMm",
   // ── Gross dimensions ─────────────────────────────────────────────────────────
   "brutto-länge": "grossLengthMm",
   bruttolänge: "grossLengthMm",
+  "brutto-laenge": "grossLengthMm", // ASCII-Schreibweise
+  bruttolaenge: "grossLengthMm",
   grosslength: "grossLengthMm",
   "brutto l": "grossLengthMm",
   bruttol: "grossLengthMm",
@@ -129,6 +135,8 @@ const FIELD_MAP: Record<string, string> = {
   bruttob: "grossWidthMm",
   "brutto-höhe": "grossHeightMm",
   bruttohöhe: "grossHeightMm",
+  "brutto-hoehe": "grossHeightMm",  // ASCII-Schreibweise
+  bruttohoehe: "grossHeightMm",
   grossheight: "grossHeightMm",
   "brutto h": "grossHeightMm",
   bruttoh: "grossHeightMm",
