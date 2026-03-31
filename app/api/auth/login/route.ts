@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PASSWORD = "Alternate10!";
 const COOKIE_NAME = "ch_auth";
-const COOKIE_VALUE = "authenticated_ch_2024";
+
+// Password → cookie value mapping
+// Full access: Alternate10!   → authenticated_ch_2024
+// Read-only:   Abgaben0815!   → readonly_ch_2024
+const CREDENTIALS: Record<string, string> = {
+  "Alternate10!": "authenticated_ch_2024",
+  "Abgaben0815!": "readonly_ch_2024",
+};
 
 export async function POST(request: NextRequest) {
   const { password } = await request.json();
 
-  if (password !== PASSWORD) {
+  const cookieValue = CREDENTIALS[password as string];
+  if (!cookieValue) {
     return NextResponse.json({ error: "Falsches Passwort" }, { status: 401 });
   }
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(COOKIE_NAME, COOKIE_VALUE, {
+  const response = NextResponse.json({
+    ok: true,
+    role: cookieValue === "readonly_ch_2024" ? "readonly" : "admin",
+  });
+  response.cookies.set(COOKIE_NAME, cookieValue, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

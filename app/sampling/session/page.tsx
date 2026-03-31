@@ -5,7 +5,7 @@ import Link from "next/link";
 
 interface ProductHit {
   id: string;
-  sku: string;
+  ean: string;
   internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
@@ -203,10 +203,10 @@ export default function SamplingSessionPage() {
     let identifiers: string[] = [];
     const sep = lines[0].includes(";") ? ";" : lines[0].includes(",") ? "," : null;
     if (sep) {
-      // Has header row — look for a column called sku / artikelnummer / article / id / nummer
+      // Has header row — look for a column called ean / sku / artikelnummer / article / id / nummer
       const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase().replace(/["\s]/g, ""));
       const skuIdx = headers.findIndex((h) =>
-        ["sku", "artikelnummer", "articlenumber", "article", "artnr", "artnummer",
+        ["ean", "gtin", "sku", "artikelnummer", "articlenumber", "article", "artnr", "artnummer",
          "internenummer", "interneartnr", "id"].includes(h)
       );
       const colIdx = skuIdx >= 0 ? skuIdx : 0; // fallback: first column
@@ -415,7 +415,7 @@ export default function SamplingSessionPage() {
                         >
                           <div className="min-w-0">
                             <span className="font-mono text-xs text-blue-600 mr-2">
-                              {p.sku}
+                              {p.ean}
                             </span>
                             {p.internalArticleNumber && (
                               <span className="text-xs text-gray-400 mr-2">
@@ -455,8 +455,8 @@ export default function SamplingSessionPage() {
                   CSV oder Textdatei hochladen
                 </p>
                 <p className="text-xs text-gray-500 mb-3">
-                  Eine Zeile pro Artikelnummer (SKU oder interne Art.-Nr.).
-                  Oder CSV mit Spaltenüberschrift <code className="bg-gray-100 px-1 rounded">sku</code> /
+                  Eine Zeile pro EAN oder interne Art.-Nr.
+                  Oder CSV mit Spaltenüberschrift <code className="bg-gray-100 px-1 rounded">ean</code> /
                   {" "}<code className="bg-gray-100 px-1 rounded">artikelnummer</code>.
                   Nicht erkannte Artikel werden als Fehler angezeigt und übersprungen.
                 </p>
@@ -602,7 +602,7 @@ export default function SamplingSessionPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs text-blue-600">{row.product.sku}</span>
+                        <span className="font-mono text-xs text-blue-600">{row.product.ean}</span>
                         {row.product.internalArticleNumber && (
                           <span className="text-xs text-gray-400">{row.product.internalArticleNumber}</span>
                         )}
@@ -793,7 +793,7 @@ export default function SamplingSessionPage() {
                       >
                         <td className="px-3 py-2 text-gray-400 text-xs">{idx + 1}</td>
                         <td className="px-3 py-2">
-                          <div className="font-mono text-xs text-blue-600">{row.product.sku}</div>
+                          <div className="font-mono text-xs text-blue-600">{row.product.ean}</div>
                           {row.product.internalArticleNumber && (
                             <div className="text-xs text-gray-400">{row.product.internalArticleNumber}</div>
                           )}
@@ -888,7 +888,7 @@ export default function SamplingSessionPage() {
                   {rows.map((row, idx) => (
                     <tr key={row.product.id}>
                       <td>{idx + 1}</td>
-                      <td>{row.product.sku}{row.product.internalArticleNumber ? ` / ${row.product.internalArticleNumber}` : ""}</td>
+                      <td>{row.product.ean}{row.product.internalArticleNumber ? ` / ${row.product.internalArticleNumber}` : ""}</td>
                       <td>{row.product.productName}</td>
                       <td>{row.product.category}</td>
                       <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>

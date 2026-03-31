@@ -5,7 +5,7 @@ import Link from "next/link";
 
 interface BatchProduct {
   id: string;
-  sku: string;
+  ean: string;
   internalArticleNumber: string | null;
   productName: string;
   category: string | null;
@@ -207,7 +207,7 @@ export default function BatchSamplingPage() {
                   >
                     <td className="px-3 py-2">
                       <div className="font-mono text-xs text-blue-600">
-                        {row.product.sku}
+                        {row.product.ean}
                       </div>
                       {row.product.internalArticleNumber && (
                         <div className="text-xs text-gray-400">

@@ -32,7 +32,7 @@ async function main() {
   const products = [
     // Festplatten
     {
-      sku: "WD-BLUE-1TB-001",
+      ean: "WD-BLUE-1TB-001",
       productName: "WD Blue 1TB 3.5\" HDD",
       manufacturer: "Western Digital",
       brand: "WD",
@@ -49,7 +49,7 @@ async function main() {
       grossHeightMm: 45,
     },
     {
-      sku: "WD-RED-4TB-002",
+      ean: "WD-RED-4TB-002",
       productName: "WD Red Plus 4TB NAS HDD",
       manufacturer: "Western Digital",
       brand: "WD",
@@ -66,7 +66,7 @@ async function main() {
       grossHeightMm: 50,
     },
     {
-      sku: "SAM-870-500-003",
+      ean: "SAM-870-500-003",
       productName: "Samsung 870 EVO 500GB SSD",
       manufacturer: "Samsung",
       brand: "Samsung",
@@ -83,7 +83,7 @@ async function main() {
       grossHeightMm: 15,
     },
     {
-      sku: "SAM-870-1TB-004",
+      ean: "SAM-870-1TB-004",
       productName: "Samsung 870 EVO 1TB SSD",
       manufacturer: "Samsung",
       brand: "Samsung",
@@ -101,7 +101,7 @@ async function main() {
     },
     // PCs / Komponenten
     {
-      sku: "INL-NUC-I5-005",
+      ean: "INL-NUC-I5-005",
       productName: "Intel NUC 12 Pro i5 Mini-PC",
       manufacturer: "Intel",
       brand: "Intel NUC",
@@ -118,7 +118,7 @@ async function main() {
       grossHeightMm: 120,
     },
     {
-      sku: "LEN-MINI-006",
+      ean: "LEN-MINI-006",
       productName: "Lenovo ThinkCentre M75q Gen 2",
       manufacturer: "Lenovo",
       brand: "ThinkCentre",
@@ -136,7 +136,7 @@ async function main() {
     },
     // Monitore
     {
-      sku: "LG-27UK-007",
+      ean: "LG-27UK-007",
       productName: "LG 27UK850 4K Monitor 27\"",
       manufacturer: "LG",
       brand: "LG",
@@ -153,7 +153,7 @@ async function main() {
       grossHeightMm: 170,
     },
     {
-      sku: "DEL-P2422H-008",
+      ean: "DEL-P2422H-008",
       productName: "Dell P2422H Full HD Monitor 24\"",
       manufacturer: "Dell",
       brand: "Dell",
@@ -171,7 +171,7 @@ async function main() {
     },
     // Zubehör
     {
-      sku: "LOG-MXM3-009",
+      ean: "LOG-MXM3-009",
       productName: "Logitech MX Master 3 Maus",
       manufacturer: "Logitech",
       brand: "Logitech",
@@ -188,7 +188,7 @@ async function main() {
       grossHeightMm: 65,
     },
     {
-      sku: "LOG-K380-010",
+      ean: "LOG-K380-010",
       productName: "Logitech K380 Bluetooth Tastatur",
       manufacturer: "Logitech",
       brand: "Logitech",
@@ -205,7 +205,7 @@ async function main() {
       grossHeightMm: 45,
     },
     {
-      sku: "TPL-CAT6-011",
+      ean: "TPL-CAT6-011",
       productName: "TP-Link CAT6 Patchkabel 2m",
       manufacturer: "TP-Link",
       brand: "TP-Link",
@@ -222,7 +222,7 @@ async function main() {
       grossHeightMm: 30,
     },
     {
-      sku: "APC-UPS-012",
+      ean: "APC-UPS-012",
       productName: "APC Back-UPS 700VA",
       manufacturer: "APC",
       brand: "APC",
@@ -240,7 +240,7 @@ async function main() {
     },
     // Ohne vollständige Daten (um Mindestdaten-Check zu testen)
     {
-      sku: "UNKN-CABLE-013",
+      ean: "UNKN-CABLE-013",
       productName: "Generic USB-C Kabel",
       manufacturer: null,
       brand: null,
@@ -257,7 +257,7 @@ async function main() {
       grossHeightMm: null,
     },
     {
-      sku: "SAM-T5-014",
+      ean: "SAM-T5-014",
       productName: "Samsung T5 Portable SSD 500GB",
       manufacturer: "Samsung",
       brand: "Samsung",
@@ -274,7 +274,7 @@ async function main() {
       grossHeightMm: 40,
     },
     {
-      sku: "LOG-C920-015",
+      ean: "LOG-C920-015",
       productName: "Logitech C920 HD Webcam",
       manufacturer: "Logitech",
       brand: "Logitech",
@@ -292,15 +292,15 @@ async function main() {
     },
   ];
 
-  const createdProducts: Array<{ id: string; sku: string; category: string | null; subcategory: string | null }> = [];
+  const createdProducts: Array<{ id: string; ean: string; category: string | null; subcategory: string | null }> = [];
 
   for (const p of products) {
     const product = await prisma.product.upsert({
-      where: { sku: p.sku },
+      where: { ean: p.ean },
       create: { ...p, importBatchId: batch.id },
       update: { ...p },
     });
-    createdProducts.push({ id: product.id, sku: product.sku, category: product.category, subcategory: product.subcategory });
+    createdProducts.push({ id: product.id, ean: product.ean, category: product.category, subcategory: product.subcategory });
 
     // Create initial packaging profile
     await prisma.productPackagingProfile.upsert({
@@ -317,31 +317,31 @@ async function main() {
 
   const samplingData = [
     // WD Blue 1TB HDD
-    { sku: "WD-BLUE-1TB-001", plasticG: 42.5, paperG: 185.0, total: 227.5, sampledBy: "Max M." },
-    { sku: "WD-BLUE-1TB-001", plasticG: 44.0, paperG: 182.0, total: 226.0, sampledBy: "Lisa K." },
+    { ean: "WD-BLUE-1TB-001", plasticG: 42.5, paperG: 185.0, total: 227.5, sampledBy: "Max M." },
+    { ean: "WD-BLUE-1TB-001", plasticG: 44.0, paperG: 182.0, total: 226.0, sampledBy: "Lisa K." },
     // WD Red 4TB HDD (similar to Blue, slightly more packaging)
-    { sku: "WD-RED-4TB-002", plasticG: 55.0, paperG: 220.0, total: 275.0, sampledBy: "Max M." },
+    { ean: "WD-RED-4TB-002", plasticG: 55.0, paperG: 220.0, total: 275.0, sampledBy: "Max M." },
     // Samsung 870 EVO 500GB SSD
-    { sku: "SAM-870-500-003", plasticG: 18.0, paperG: 62.0, total: 80.0, sampledBy: "Lisa K." },
-    { sku: "SAM-870-500-003", plasticG: 17.5, paperG: 60.0, total: 77.5, sampledBy: "Max M." },
+    { ean: "SAM-870-500-003", plasticG: 18.0, paperG: 62.0, total: 80.0, sampledBy: "Lisa K." },
+    { ean: "SAM-870-500-003", plasticG: 17.5, paperG: 60.0, total: 77.5, sampledBy: "Max M." },
     // Samsung T5 Portable SSD
-    { sku: "SAM-T5-014", plasticG: 22.0, paperG: 55.0, total: 77.0, sampledBy: "Lisa K." },
+    { ean: "SAM-T5-014", plasticG: 22.0, paperG: 55.0, total: 77.0, sampledBy: "Lisa K." },
     // Intel NUC Mini-PC
-    { sku: "INL-NUC-I5-005", plasticG: 120.0, paperG: 380.0, total: 500.0, sampledBy: "Max M." },
+    { ean: "INL-NUC-I5-005", plasticG: 120.0, paperG: 380.0, total: 500.0, sampledBy: "Max M." },
     // LG Monitor
-    { sku: "LG-27UK-007", plasticG: 340.0, paperG: 1100.0, total: 1440.0, sampledBy: "Lisa K." },
+    { ean: "LG-27UK-007", plasticG: 340.0, paperG: 1100.0, total: 1440.0, sampledBy: "Lisa K." },
     // Dell Monitor
-    { sku: "DEL-P2422H-008", plasticG: 280.0, paperG: 920.0, total: 1200.0, sampledBy: "Max M." },
+    { ean: "DEL-P2422H-008", plasticG: 280.0, paperG: 920.0, total: 1200.0, sampledBy: "Max M." },
     // Logitech MX Master 3 Maus
-    { sku: "LOG-MXM3-009", plasticG: 28.0, paperG: 90.0, total: 118.0, sampledBy: "Lisa K." },
+    { ean: "LOG-MXM3-009", plasticG: 28.0, paperG: 90.0, total: 118.0, sampledBy: "Lisa K." },
     // Logitech K380 Tastatur
-    { sku: "LOG-K380-010", plasticG: 35.0, paperG: 110.0, total: 145.0, sampledBy: "Max M." },
+    { ean: "LOG-K380-010", plasticG: 35.0, paperG: 110.0, total: 145.0, sampledBy: "Max M." },
     // TP-Link Kabel
-    { sku: "TPL-CAT6-011", plasticG: 8.0, paperG: 28.0, total: 36.0, sampledBy: "Lisa K." },
+    { ean: "TPL-CAT6-011", plasticG: 8.0, paperG: 28.0, total: 36.0, sampledBy: "Lisa K." },
   ];
 
   for (const s of samplingData) {
-    const product = createdProducts.find((p) => p.sku === s.sku);
+    const product = createdProducts.find((p) => p.ean === s.ean);
     if (!product) continue;
 
     await prisma.samplingRecord.create({
@@ -447,7 +447,7 @@ async function main() {
         }
       }
     } catch (err) {
-      console.warn(`  Warning: Could not estimate for ${p.sku}:`, err);
+      console.warn(`  Warning: Could not estimate for ${p.ean}:`, err));
     }
   }
 

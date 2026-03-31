@@ -33,18 +33,18 @@ function decodeBuffer(buffer: Buffer): string {
 // Covers: import template names, export abbreviations, English names, common typos.
 // normalizeKey() strips trailing "(unit)" before lookup, so "Netto-Gewicht (g)" → "netto-gewicht".
 const FIELD_MAP: Record<string, string> = {
-  // ── SKU / article number ────────────────────────────────────────────────────
-  sku: "sku",
-  "art.-nr": "sku",
-  "art.nr": "sku",
-  artikelnummer: "sku",
-  "artikel-nr": "sku",
-  "lieferanten-art.-nr": "sku",
-  "lieferanten art nr": "sku",
-  "hersteller art nr": "sku",
-  "hersteller-art.-nr": "sku",
-  ean: "sku",
-  gtin: "sku",
+  // ── EAN / article number ────────────────────────────────────────────────────
+  ean: "ean",
+  gtin: "ean",
+  "art.-nr": "ean",
+  "art.nr": "ean",
+  artikelnummer: "ean",
+  "artikel-nr": "ean",
+  sku: "ean",
+  "lieferanten-art.-nr": "ean",
+  "lieferanten art nr": "ean",
+  "hersteller art nr": "ean",
+  "hersteller-art.-nr": "ean",
   // ── Internal article number ──────────────────────────────────────────────────
   "interne artikelnummer": "internalArticleNumber",
   "interne art.-nr": "internalArticleNumber",
@@ -86,8 +86,6 @@ const FIELD_MAP: Record<string, string> = {
   price: "ekPrice",
   preis: "ekPrice",
   // ── Net weight ──────────────────────────────────────────────────────────────
-  // Import template: "Netto-Gewicht (g)" → normalizes to "netto-gewicht"
-  // Export header:   "Nettogewicht (g)"  → normalizes to "nettogewicht"
   "netto-gewicht": "netWeightG",
   nettogewicht: "netWeightG",
   netweight: "netWeightG",
@@ -96,8 +94,6 @@ const FIELD_MAP: Record<string, string> = {
   gewicht: "netWeightG",
   weight: "netWeightG",
   // ── Gross weight ─────────────────────────────────────────────────────────────
-  // Import template: "Brutto-Gewicht (g)" → "brutto-gewicht"
-  // Export header:   "Bruttogewicht (g)"  → "bruttogewicht"
   "brutto-gewicht": "grossWeightG",
   bruttogewicht: "grossWeightG",
   grossweight: "grossWeightG",
@@ -105,39 +101,54 @@ const FIELD_MAP: Record<string, string> = {
   "brutto gewicht g": "grossWeightG",
   "brutto-gewicht inkl. verpackung": "grossWeightG",
   // ── Net dimensions ───────────────────────────────────────────────────────────
-  // Import template full names → "netto-länge" etc.
-  // Export abbreviations → "netto l", "netto b", "netto h"
   "netto-länge": "netLengthMm",
   nettolänge: "netLengthMm",
   netlength: "netLengthMm",
-  "netto l": "netLengthMm",   // export abbreviation
-  "nettol": "netLengthMm",
+  "netto l": "netLengthMm",
+  nettol: "netLengthMm",
   "netto-breite": "netWidthMm",
   nettobreite: "netWidthMm",
   netwidth: "netWidthMm",
-  "netto b": "netWidthMm",    // export abbreviation
-  "nettob": "netWidthMm",
+  "netto b": "netWidthMm",
+  nettob: "netWidthMm",
   "netto-höhe": "netHeightMm",
   nettohöhe: "netHeightMm",
   netheight: "netHeightMm",
-  "netto h": "netHeightMm",   // export abbreviation
-  "nettoh": "netHeightMm",
+  "netto h": "netHeightMm",
+  nettoh: "netHeightMm",
   // ── Gross dimensions ─────────────────────────────────────────────────────────
   "brutto-länge": "grossLengthMm",
   bruttolänge: "grossLengthMm",
   grosslength: "grossLengthMm",
-  "brutto l": "grossLengthMm", // export abbreviation
-  "bruttol": "grossLengthMm",
+  "brutto l": "grossLengthMm",
+  bruttol: "grossLengthMm",
   "brutto-breite": "grossWidthMm",
   bruttobreite: "grossWidthMm",
   grosswidth: "grossWidthMm",
-  "brutto b": "grossWidthMm",  // export abbreviation
-  "bruttob": "grossWidthMm",
+  "brutto b": "grossWidthMm",
+  bruttob: "grossWidthMm",
   "brutto-höhe": "grossHeightMm",
   bruttohöhe: "grossHeightMm",
   grossheight: "grossHeightMm",
-  "brutto h": "grossHeightMm", // export abbreviation
-  "bruttoh": "grossHeightMm",
+  "brutto h": "grossHeightMm",
+  bruttoh: "grossHeightMm",
+  // ── Hersteller-Angaben ────────────────────────────────────────────────────────
+  "hersteller-nettogewicht": "mfrNetWeightG",
+  "hersteller nettogewicht": "mfrNetWeightG",
+  mfrnetweightg: "mfrNetWeightG",
+  "mfr-nettogewicht": "mfrNetWeightG",
+  "hersteller-bruttogewicht": "mfrGrossWeightG",
+  "hersteller bruttogewicht": "mfrGrossWeightG",
+  mfrgrossweightg: "mfrGrossWeightG",
+  "mfr-bruttogewicht": "mfrGrossWeightG",
+  "hersteller-kunststoff": "mfrPlasticG",
+  "hersteller kunststoff": "mfrPlasticG",
+  mfrplasticg: "mfrPlasticG",
+  "mfr-kunststoff": "mfrPlasticG",
+  "hersteller-papier": "mfrPaperG",
+  "hersteller papier": "mfrPaperG",
+  mfrpaperg: "mfrPaperG",
+  "mfr-papier": "mfrPaperG",
   // ── Other ────────────────────────────────────────────────────────────────────
   quelle: "source",
   source: "source",
@@ -147,8 +158,7 @@ const FIELD_MAP: Record<string, string> = {
   "annual units sold": "annualUnitsSold",
   "absatz stk": "annualUnitsSold",
   annualunitssold: "annualUnitsSold",
-  // ── System-ID (permanent record key, used for updates instead of SKU) ────────
-  // normalizeKey strips "(g)"/"(mm)" suffixes, so "System-ID" → "system-id"
+  // ── System-ID (permanent record key, used for updates instead of EAN) ────────
   "system-id": "_systemId",
   systemid: "_systemId",
   "system id": "_systemId",
@@ -197,6 +207,10 @@ function mapRow(row: Record<string, string>): Record<string, string | number | n
           "grossLengthMm",
           "grossWidthMm",
           "grossHeightMm",
+          "mfrNetWeightG",
+          "mfrGrossWeightG",
+          "mfrPlasticG",
+          "mfrPaperG",
         ].includes(field)
       ) {
         const num = parseFloat(trimmed.replace(",", "."));
@@ -281,8 +295,8 @@ export async function POST(request: NextRequest) {
     // which columns were recognized, which were ignored, and what they map to.
     const FIELD_LABELS: Record<string, string> = {
       _systemId: "System-ID 🔑",
-      sku: "SKU",
-      internalArticleNumber: "InterneArtNr 🔑",
+      ean: "EAN",
+      internalArticleNumber: "InterneArtNr",
       productName: "Produktname",
       manufacturer: "Hersteller",
       brand: "Marke",
@@ -297,6 +311,10 @@ export async function POST(request: NextRequest) {
       grossLengthMm: "Brutto-Länge (mm)",
       grossWidthMm: "Brutto-Breite (mm)",
       grossHeightMm: "Brutto-Höhe (mm)",
+      mfrNetWeightG: "Hersteller-Nettogewicht (g) 🏭",
+      mfrGrossWeightG: "Hersteller-Bruttogewicht (g) 🏭",
+      mfrPlasticG: "Hersteller-Kunststoff (g) 🏭",
+      mfrPaperG: "Hersteller-Papier (g) 🏭",
       annualUnitsSold: "Jahresabsatz (Stk.)",
       source: "Quelle",
     };
@@ -315,7 +333,7 @@ export async function POST(request: NextRequest) {
 
     const results: {
       row: number;
-      sku: string | null;
+      ean: string | null;
       status: "success" | "updated" | "error" | "warning";
       errors: string[];
       warnings: string[];
@@ -352,6 +370,7 @@ export async function POST(request: NextRequest) {
       "netLengthMm", "netWidthMm", "netHeightMm",
       "grossLengthMm", "grossWidthMm", "grossHeightMm",
       "ekPrice", "annualUnitsSold",
+      "mfrNetWeightG", "mfrGrossWeightG", "mfrPlasticG", "mfrPaperG",
     ]);
 
     function buildUpdateFields(base: Record<string, unknown>): Record<string, unknown> {
@@ -365,26 +384,24 @@ export async function POST(request: NextRequest) {
     async function processRow(rawRow: Record<string, string>, rowNum: number): Promise<RowResult> {
       const mapped = mapRow(rawRow);
       const systemId = mapped._systemId as string | null;
-      const internalArticleNumber = (mapped.internalArticleNumber as string) || null;
 
-      // SKU is required UNLESS a System-ID or internalArticleNumber is provided for lookup.
-      // In those cases, the existing record's SKU is used if not supplied in the CSV.
-      const hasLookupKey = !!(systemId || internalArticleNumber);
-      const validationInput = hasLookupKey
-        ? { ...mapped, sku: (mapped.sku as string) || "_lookup_" } // satisfy validator temporarily
+      // EAN is required UNLESS a System-ID is provided (in that case the existing record's EAN is used).
+      const hasSystemId = !!systemId;
+      const validationInput = hasSystemId
+        ? { ...mapped, ean: (mapped.ean as string) || "_lookup_" } // satisfy validator temporarily
         : mapped;
       const validation = validateProductInput(validationInput as Parameters<typeof validateProductInput>[0]);
 
-      // Re-check: if sku error and we have a lookup key, clear that specific error
-      const errors = hasLookupKey
-        ? validation.errors.filter((e) => !e.includes("SKU"))
+      // Re-check: if ean error and we have a system-id, clear that specific error
+      const errors = hasSystemId
+        ? validation.errors.filter((e) => !e.includes("EAN"))
         : validation.errors;
 
       if (errors.length > 0) {
         errorCount++;
         return {
           row: rowNum,
-          sku: (mapped.sku as string) ?? null,
+          ean: (mapped.ean as string) ?? null,
           status: "error",
           errors,
           warnings: validation.warnings,
@@ -395,8 +412,8 @@ export async function POST(request: NextRequest) {
       if (!dryRun && batch) {
         try {
           const productFields = {
-            sku: mapped.sku as string,
-            internalArticleNumber: internalArticleNumber,
+            ean: mapped.ean as string,
+            internalArticleNumber: (mapped.internalArticleNumber as string) || null,
             productName: (mapped.productName as string) || "",
             manufacturer: (mapped.manufacturer as string) || null,
             brand: (mapped.brand as string) || null,
@@ -411,6 +428,10 @@ export async function POST(request: NextRequest) {
             grossLengthMm: mapped.grossLengthMm as number | null,
             grossWidthMm: mapped.grossWidthMm as number | null,
             grossHeightMm: mapped.grossHeightMm as number | null,
+            mfrNetWeightG: mapped.mfrNetWeightG as number | null,
+            mfrGrossWeightG: mapped.mfrGrossWeightG as number | null,
+            mfrPlasticG: mapped.mfrPlasticG as number | null,
+            mfrPaperG: mapped.mfrPaperG as number | null,
             annualUnitsSold: mapped.annualUnitsSold as number | null,
             source: (mapped.source as string) || null,
           };
@@ -419,84 +440,34 @@ export async function POST(request: NextRequest) {
           let isNew = false;
 
           if (systemId) {
-            // ── System-ID path: look up by permanent ID, allow SKU to change ──
+            // ── System-ID path: look up by permanent ID ──────────────────────
+            // System-ID is the ONLY lookup mechanism. If found → update.
+            // If not found → create new (EAN required in this case).
             const existing = await prisma.product.findUnique({ where: { id: systemId } });
             if (existing) {
-              // Use existing SKU if not provided in CSV
               const updateData = buildUpdateFields({
                 ...productFields,
-                sku: productFields.sku || existing.sku,
+                ean: productFields.ean || existing.ean,
                 importBatchId: existing.importBatchId ?? batch.id,
               });
               product = await prisma.product.update({ where: { id: systemId }, data: updateData });
             } else {
-              // System-ID not found — fall through to SKU-based upsert
-              const ex2 = productFields.sku
-                ? await prisma.product.findUnique({ where: { sku: productFields.sku } })
-                : null;
-              if (ex2) {
-                product = await prisma.product.update({
-                  where: { id: ex2.id },
-                  data: { ...buildUpdateFields(productFields), importBatchId: ex2.importBatchId ?? batch.id },
-                });
-              } else if (productFields.sku) {
-                product = await prisma.product.create({
-                  data: { ...productFields, importBatchId: batch.id },
-                });
-                isNew = true;
-              } else {
-                throw new Error("System-ID nicht gefunden und keine SKU angegeben — Zeile übersprungen");
+              // System-ID not found → create new article
+              if (!productFields.ean) {
+                throw new Error("System-ID nicht gefunden und keine EAN angegeben — Zeile übersprungen");
               }
-            }
-          } else if (internalArticleNumber && !productFields.sku) {
-            // ── Internal article number only (no SKU in CSV) ────────────────
-            const existing = await prisma.product.findFirst({
-              where: { internalArticleNumber: { equals: internalArticleNumber, mode: "insensitive" } },
-            });
-            if (existing) {
-              product = await prisma.product.update({
-                where: { id: existing.id },
-                data: {
-                  ...buildUpdateFields(productFields),
-                  sku: productFields.sku || existing.sku,
-                  importBatchId: existing.importBatchId ?? batch.id,
-                },
+              product = await prisma.product.create({
+                data: { ...productFields, importBatchId: batch.id },
               });
-            } else {
-              throw new Error(`Interne Art.-Nr. „${internalArticleNumber}" nicht gefunden — ohne SKU kann kein neuer Datensatz angelegt werden`);
-            }
-          } else if (internalArticleNumber && productFields.sku) {
-            // ── Both internalArticleNumber + SKU: prefer internalArticleNumber lookup ──
-            const byInternal = await prisma.product.findFirst({
-              where: { internalArticleNumber: { equals: internalArticleNumber, mode: "insensitive" } },
-            });
-            if (byInternal) {
-              product = await prisma.product.update({
-                where: { id: byInternal.id },
-                data: {
-                  ...buildUpdateFields(productFields),
-                  importBatchId: byInternal.importBatchId ?? batch.id,
-                },
-              });
-            } else {
-              // internalArticleNumber not found — fall through to SKU upsert
-              const existing = await prisma.product.findUnique({ where: { sku: productFields.sku } });
-              product = await prisma.product.upsert({
-                where: { sku: productFields.sku },
-                create: { ...productFields, importBatchId: batch.id },
-                update: { ...buildUpdateFields(productFields), importBatchId: existing?.importBatchId ?? batch.id },
-              });
-              isNew = !existing;
+              isNew = true;
             }
           } else {
-            // ── SKU path (default) ───────────────────────────────────────────
-            const existing = await prisma.product.findUnique({ where: { sku: productFields.sku } });
-            product = await prisma.product.upsert({
-              where: { sku: productFields.sku },
-              create: { ...productFields, importBatchId: batch.id },
-              update: { ...buildUpdateFields(productFields), importBatchId: existing?.importBatchId ?? batch.id },
+            // ── No System-ID: always create a new article ────────────────────
+            // EAN is required (ensured by validation above).
+            product = await prisma.product.create({
+              data: { ...productFields, importBatchId: batch.id },
             });
-            isNew = !existing;
+            isNew = true;
           }
 
           // Ensure packaging profile exists
@@ -513,7 +484,7 @@ export async function POST(request: NextRequest) {
           successCount++;
           return {
             row: rowNum,
-            sku: productFields.sku,
+            ean: productFields.ean,
             status: isNew ? "success" : "updated",
             errors: [],
             warnings: validation.warnings,
@@ -523,7 +494,7 @@ export async function POST(request: NextRequest) {
           errorCount++;
           return {
             row: rowNum,
-            sku: (mapped.sku as string) ?? (mapped.internalArticleNumber as string) ?? null,
+            ean: (mapped.ean as string) ?? null,
             status: "error",
             errors: [`Database error: ${err instanceof Error ? err.message : "unknown"}`],
             warnings: [],
@@ -535,7 +506,7 @@ export async function POST(request: NextRequest) {
         successCount++;
         return {
           row: rowNum,
-          sku: (mapped.sku as string) ?? (mapped.internalArticleNumber as string) ?? null,
+          ean: (mapped.ean as string) ?? null,
           status: validation.warnings.length > 0 ? "warning" : "success",
           errors: [],
           warnings: validation.warnings,

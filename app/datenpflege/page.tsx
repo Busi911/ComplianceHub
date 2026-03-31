@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface MigrateAnalysis {
-  skuOnlyCount: number;
+  eanOnlyCount: number;
   duplicateExactCount: number;
-  preview: Array<{ id: string; sku: string; internalArticleNumber: string | null; productName: string }>;
+  preview: Array<{ id: string; ean: string; internalArticleNumber: string | null; productName: string }>;
 }
 
 export default function DatepflegePage() {
@@ -44,7 +44,7 @@ export default function DatepflegePage() {
 
   const noIssues =
     analysis &&
-    analysis.skuOnlyCount === 0 &&
+    analysis.eanOnlyCount === 0 &&
     analysis.duplicateExactCount === 0;
 
   return (
@@ -61,14 +61,14 @@ export default function DatepflegePage() {
         </p>
       </div>
 
-      {/* ── SKU-Bereinigung ── */}
+      {/* ── EAN-Bereinigung ── */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center gap-3">
           <span className="text-lg">🏷</span>
           <div>
-            <div className="font-semibold text-gray-900 text-sm">SKU-Bereinigung</div>
+            <div className="font-semibold text-gray-900 text-sm">EAN-Bereinigung</div>
             <div className="text-xs text-gray-500">
-              Wenn die SKU mit internen Artikelnummern befüllt wurde statt mit EAN / Hersteller-Art.-Nr.
+              Wenn das EAN-Feld mit internen Artikelnummern befüllt wurde statt mit der echten EAN / GTIN.
             </div>
           </div>
         </div>
@@ -77,8 +77,8 @@ export default function DatepflegePage() {
           {/* Explanation */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900 space-y-2">
             <p>
-              <strong>Hintergrund:</strong> Das Feld <em>SKU</em> sollte die herstellerseitige oder
-              handelsweit eindeutige Nummer enthalten (EAN, Hersteller-Art.-Nr.) — damit Verpackungsdaten
+              <strong>Hintergrund:</strong> Das Feld <em>EAN</em> sollte die handelsweit eindeutige
+              Nummer enthalten (EAN-13, GTIN, Hersteller-Art.-Nr.) — damit Verpackungsdaten
               später mit anderen Unternehmen verglichen werden können.
             </p>
             <p>
@@ -99,11 +99,11 @@ export default function DatepflegePage() {
               Jeder Datensatz in ComplianceHub hat eine unveränderliche <strong>System-ID</strong> (z. B.{" "}
               <code className="bg-gray-200 px-1 rounded text-xs">cm9abc123...</code>).
               Sie ist vergleichbar mit einer <em>Steuernummer</em>: sie bleibt immer gleich, auch wenn
-              SKU oder interne Nummer sich ändern.
+              EAN oder interne Nummer sich ändern.
             </p>
             <p>
-              Wenn du die SKU leerst (Aktionen unten), wird die System-ID automatisch als neuer
-              SKU-Wert eingetragen — der Datensatz bleibt dadurch eindeutig identifizierbar
+              Wenn du das EAN-Feld leerst (Aktionen unten), wird die System-ID automatisch als neuer
+              EAN-Wert eingetragen — der Datensatz bleibt dadurch eindeutig identifizierbar
               und importierbar.
             </p>
             <p className="text-gray-500 text-xs">
@@ -118,23 +118,23 @@ export default function DatepflegePage() {
             <>
               {noIssues ? (
                 <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm">
-                  ✓ Keine Probleme gefunden — SKU- und interne Nummern sehen korrekt aus.
+                  ✓ Keine Probleme gefunden — EAN- und interne Nummern sehen korrekt aus.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className={`rounded-lg border px-4 py-3 ${analysis.skuOnlyCount > 0 ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-gray-50"}`}>
-                    <div className="text-2xl font-bold text-gray-900">{analysis.skuOnlyCount}</div>
+                  <div className={`rounded-lg border px-4 py-3 ${analysis.eanOnlyCount > 0 ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-gray-50"}`}>
+                    <div className="text-2xl font-bold text-gray-900">{analysis.eanOnlyCount}</div>
                     <div className="text-sm text-gray-700 mt-0.5">
-                      Produkte mit SKU, aber <em>ohne</em> interne Artikelnummer
+                      Produkte mit EAN, aber <em>ohne</em> interne Artikelnummer
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Wahrscheinlich interne Nummern im SKU-Feld
+                      Möglicherweise interne Nummern im EAN-Feld
                     </div>
                   </div>
                   <div className={`rounded-lg border px-4 py-3 ${analysis.duplicateExactCount > 0 ? "border-red-300 bg-red-50" : "border-gray-200 bg-gray-50"}`}>
                     <div className="text-2xl font-bold text-gray-900">{analysis.duplicateExactCount}</div>
                     <div className="text-sm text-gray-700 mt-0.5">
-                      Produkte wo SKU = Interne Artikelnummer (exakt gleich)
+                      Produkte wo EAN = Interne Artikelnummer (exakt gleich)
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
                       Klarer Duplikat-Befund
@@ -154,7 +154,7 @@ export default function DatepflegePage() {
                       <thead>
                         <tr className="bg-gray-50">
                           <th className="px-3 py-2 text-left font-medium text-gray-600">Produkt</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">SKU (aktuell)</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">EAN (aktuell)</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">Interne Nr. (aktuell)</th>
                         </tr>
                       </thead>
@@ -164,7 +164,7 @@ export default function DatepflegePage() {
                             <td className="px-3 py-2 font-medium text-gray-800 max-w-[200px] truncate">
                               {p.productName}
                             </td>
-                            <td className="px-3 py-2 font-mono text-amber-700">{p.sku}</td>
+                            <td className="px-3 py-2 font-mono text-amber-700">{p.ean}</td>
                             <td className="px-3 py-2 text-gray-400">
                               {p.internalArticleNumber ?? <em>leer</em>}
                             </td>
@@ -193,11 +193,11 @@ export default function DatepflegePage() {
                       />
                       <div>
                         <div className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
-                          SKU → Interne Artikelnummer kopieren (SKU bleibt erhalten)
+                          EAN → Interne Artikelnummer kopieren (EAN bleibt erhalten)
                         </div>
                         <div className="text-xs text-gray-500">
-                          Betrifft {analysis.skuOnlyCount} Produkte ohne interne Nummer.
-                          Ihr könnt danach manuell die echte EAN in das SKU-Feld eintragen.
+                          Betrifft {analysis.eanOnlyCount} Produkte ohne interne Nummer.
+                          Ihr könnt danach manuell die echte EAN eintragen.
                         </div>
                       </div>
                     </label>
@@ -213,11 +213,11 @@ export default function DatepflegePage() {
                       />
                       <div>
                         <div className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
-                          SKU durch System-ID ersetzen wo SKU = Interne Artikelnummer (exakte Duplikate)
+                          EAN durch System-ID ersetzen wo EAN = Interne Artikelnummer (exakte Duplikate)
                         </div>
                         <div className="text-xs text-gray-500">
                           Betrifft {analysis.duplicateExactCount} Produkte.
-                          Interne Nummer bleibt unverändert, SKU wird zur permanenten System-ID.
+                          Interne Nummer bleibt unverändert, EAN wird zur permanenten System-ID.
                         </div>
                       </div>
                     </label>
@@ -233,11 +233,11 @@ export default function DatepflegePage() {
                       />
                       <div>
                         <div className="text-sm font-medium text-gray-900 group-hover:text-blue-700">
-                          SKU → Interne Artikelnummer kopieren und SKU durch System-ID ersetzen
+                          EAN → Interne Artikelnummer kopieren und EAN durch System-ID ersetzen
                         </div>
                         <div className="text-xs text-gray-500">
-                          Betrifft {analysis.skuOnlyCount} Produkte ohne interne Nummer.
-                          Die interne Nummer erhält euren bisherigen Wert, die SKU wird zur
+                          Betrifft {analysis.eanOnlyCount} Produkte ohne interne Nummer.
+                          Die interne Nummer erhält euren bisherigen Wert, die EAN wird zur
                           permanenten System-ID — bereit für die echte EAN wenn ihr sie habt.
                         </div>
                       </div>

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       where.OR = [
-        { sku: { contains: search, mode: "insensitive" } },
+        { ean: { contains: search, mode: "insensitive" } },
         { internalArticleNumber: { contains: search, mode: "insensitive" } },
         { productName: { contains: search, mode: "insensitive" } },
         { manufacturer: { contains: search, mode: "insensitive" } },

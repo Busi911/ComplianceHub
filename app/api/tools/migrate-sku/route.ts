@@ -2,48 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/tools/migrate-sku — dry run analysis
+// Note: SKU has been renamed to EAN. This tool is kept for legacy migration purposes.
 // Returns stats about how many products would be affected
 export async function GET() {
   try {
-    // Count products where sku is set but internalArticleNumber is null
-    // These are the most likely candidates: user only has the internal number in sku
-    const skuOnly = await prisma.product.count({
+    // Count products where ean is set but internalArticleNumber is null
+    const eanOnly = await prisma.product.count({
       where: {
-        sku: { not: "" },
+        ean: { not: "" },
         internalArticleNumber: null,
       },
     });
 
-    // Count products where sku == internalArticleNumber (clear duplicate)
-    const duplicate = await prisma.product.count({
-      where: {
-        AND: [
-          { sku: { not: "" } },
-          { internalArticleNumber: { not: null } },
-          // Prisma doesn't support field-to-field comparison directly, use raw
-        ],
-      },
-    });
-
-    // Use raw SQL for sku == internalArticleNumber
+    // Use raw SQL for ean == internalArticleNumber
     const dupResult = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM "Product"
-      WHERE sku IS NOT NULL
-        AND sku <> ''
+      WHERE ean IS NOT NULL
+        AND ean <> ''
         AND "internalArticleNumber" IS NOT NULL
-        AND sku = "internalArticleNumber"
+        AND ean = "internalArticleNumber"
     `;
     const duplicateExact = Number(dupResult[0].count);
 
-    // Preview: first 10 products with sku set but no internalArticleNumber
+    // Preview: first 10 products with ean set but no internalArticleNumber
     const preview = await prisma.product.findMany({
       where: {
-        sku: { not: "" },
+        ean: { not: "" },
         internalArticleNumber: null,
       },
       select: {
         id: true,
-        sku: true,
+        ean: true,
         internalArticleNumber: true,
         productName: true,
       },
@@ -52,21 +41,18 @@ export async function GET() {
     });
 
     return NextResponse.json({
-      skuOnlyCount: skuOnly,
+      eanOnlyCount: eanOnly,
       duplicateExactCount: duplicateExact,
       preview,
     });
   } catch (error) {
-    console.error("migrate-sku dry-run error:", error);
+    console.error("migrate-ean dry-run error:", error);
     return NextResponse.json({ error: "Failed to analyze" }, { status: 500 });
   }
 }
 
 // POST /api/tools/migrate-sku
-// Body: { action: "copy_to_internal" | "swap" | "copy_and_clear" }
-//   copy_to_internal: copies sku → internalArticleNumber (only where internalArticleNumber is null), keeps sku
-//   copy_and_clear:   copies sku → internalArticleNumber (only where internalArticleNumber is null), then clears sku
-//   clear_duplicate:  clears sku where sku == internalArticleNumber exactly
+// Body: { action: "copy_to_internal" | "copy_and_clear" | "clear_duplicate" }
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -79,20 +65,17 @@ export async function POST(request: NextRequest) {
     let affected = 0;
 
     if (action === "copy_to_internal" || action === "copy_and_clear") {
-      // Copy sku → internalArticleNumber for products that have no internalArticleNumber
       const products = await prisma.product.findMany({
-        where: { sku: { not: "" }, internalArticleNumber: null },
-        select: { id: true, sku: true },
+        where: { ean: { not: "" }, internalArticleNumber: null },
+        select: { id: true, ean: true },
       });
 
       for (const p of products) {
         await prisma.product.update({
           where: { id: p.id },
           data: {
-            internalArticleNumber: p.sku,
-            // When clearing the SKU, use the product's permanent system ID (CUID)
-            // as the new SKU — it's unique, stable, and serves as the compliance ID.
-            ...(action === "copy_and_clear" ? { sku: p.id } : {}),
+            internalArticleNumber: p.ean,
+            ...(action === "copy_and_clear" ? { ean: p.id } : {}),
           },
         });
         affected++;
@@ -100,18 +83,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "clear_duplicate") {
-      // Clear sku where sku == internalArticleNumber — replace with system ID
       const dupes = await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "Product"
-        WHERE sku IS NOT NULL AND sku <> ''
+        WHERE ean IS NOT NULL AND ean <> ''
           AND "internalArticleNumber" IS NOT NULL
-          AND sku = "internalArticleNumber"
+          AND ean = "internalArticleNumber"
       `;
       for (const { id } of dupes) {
         await prisma.product.update({
           where: { id },
-          // Use the product's permanent system ID (CUID) as the new SKU
-          data: { sku: id },
+          data: { ean: id },
         });
         affected++;
       }
@@ -119,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, affected });
   } catch (error) {
-    console.error("migrate-sku execute error:", error);
+    console.error("migrate-ean execute error:", error);
     return NextResponse.json({ error: "Failed to migrate" }, { status: 500 });
   }
 }

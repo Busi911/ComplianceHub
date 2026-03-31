@@ -8,7 +8,7 @@ import { ConfidenceBar } from "@/components/ui/ConfidenceBar";
 
 interface PriorityProduct {
   id: string;
-  sku: string;
+  ean: string;
   internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
@@ -291,7 +291,7 @@ function SamplingPriorityInner() {
                   <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
                   <td className="px-4 py-3">
                     <div className={`font-mono text-xs text-blue-600 ${isSkipped ? "line-through" : ""}`}>
-                      {p.sku}
+                      {p.ean}
                     </div>
                     {p.internalArticleNumber && (
                       <div className="text-xs text-gray-400">{p.internalArticleNumber}</div>

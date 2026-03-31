@@ -29,7 +29,7 @@ interface BrandDetail {
   };
   products: {
     id: string;
-    sku: string;
+    ean: string;
     productName: string;
     category: string | null;
     subcategory: string | null;
@@ -383,7 +383,7 @@ export default function BrandDetailPage() {
             <tbody className="divide-y divide-gray-100">
               {data.products.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-xs text-blue-600">{p.sku}</td>
+                  <td className="px-4 py-2 font-mono text-xs text-blue-600">{p.ean}</td>
                   <td className="px-4 py-2">
                     <Link href={`/products/${p.id}`} className="hover:text-blue-600 font-medium">
                       {p.productName}

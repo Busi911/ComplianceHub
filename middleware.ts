@@ -2,8 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 
 const LOGIN_PATH = "/login";
 const COOKIE_NAME = "ch_auth";
-// Simple hash — not cryptographic, just obfuscates the plain password in the cookie
-const COOKIE_VALUE = "authenticated_ch_2024";
+const FULL_ACCESS_COOKIE = "authenticated_ch_2024";
+const READONLY_COOKIE = "readonly_ch_2024";
+
+// API paths where write operations (POST/PUT/DELETE/PATCH) are blocked for read-only users
+const WRITE_PROTECTED_PREFIXES = [
+  "/api/import",
+  "/api/products",
+  "/api/sampling",
+  "/api/estimate",
+  "/api/manufacturer-requests",
+  "/api/brands",
+  "/api/tools",
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,11 +25,29 @@ export function middleware(request: NextRequest) {
   }
 
   const cookie = request.cookies.get(COOKIE_NAME);
-  if (cookie?.value === COOKIE_VALUE) {
+  const cookieValue = cookie?.value;
+
+  // Full access — no restrictions
+  if (cookieValue === FULL_ACCESS_COOKIE) {
     return NextResponse.next();
   }
 
-  // Redirect to login, remember where the user wanted to go
+  // Read-only access — allow all GET requests, block write operations on protected paths
+  if (cookieValue === READONLY_COOKIE) {
+    const method = request.method.toUpperCase();
+    if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+      const isWriteRoute = WRITE_PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+      if (isWriteRoute) {
+        return NextResponse.json(
+          { error: "Kein Schreibzugriff — nur Leseberechtigung" },
+          { status: 403 }
+        );
+      }
+    }
+    return NextResponse.next();
+  }
+
+  // Not authenticated — redirect to login, remember where the user wanted to go
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = LOGIN_PATH;
   if (pathname !== "/") {

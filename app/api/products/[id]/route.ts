@@ -57,12 +57,18 @@ export async function PUT(
       grossWidthMm,
       grossHeightMm,
       annualUnitsSold,
+      mfrNetWeightG,
+      mfrGrossWeightG,
+      mfrPlasticG,
+      mfrPaperG,
     } = body;
 
     const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+
+    const parseOptFloat = (v: unknown) => (v != null && v !== "" ? parseFloat(String(v)) : null);
 
     const product = await prisma.product.update({
       where: { id },
@@ -88,6 +94,10 @@ export async function PUT(
           grossHeightMm != null ? parseFloat(grossHeightMm) : undefined,
         annualUnitsSold:
           annualUnitsSold != null ? parseInt(String(annualUnitsSold), 10) : null,
+        mfrNetWeightG: parseOptFloat(mfrNetWeightG),
+        mfrGrossWeightG: parseOptFloat(mfrGrossWeightG),
+        mfrPlasticG: parseOptFloat(mfrPlasticG),
+        mfrPaperG: parseOptFloat(mfrPaperG),
       },
     });
 

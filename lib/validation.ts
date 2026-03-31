@@ -6,7 +6,7 @@ export interface DataQualityResult {
 }
 
 export interface ProductInput {
-  sku?: string;
+  ean?: string;
   internalArticleNumber?: string | null;
   productName?: string;
   manufacturer?: string | null;
@@ -34,7 +34,7 @@ function hasValue(val: unknown): boolean {
  * Scoring breakdown (total 100 pts):
  *
  * Identity (20 pts)
- *   sku            10 pts  required
+ *   ean            10 pts  required
  *   productName    10 pts  required
  *
  * Estimation-critical (50 pts) — these directly determine which estimation tier fires
@@ -58,7 +58,7 @@ interface ScoredField {
 }
 
 const SCORED_FIELDS: ScoredField[] = [
-  { key: "sku",         label: "SKU",              pts: 10, tier: "required" },
+  { key: "ean",         label: "EAN",              pts: 10, tier: "required" },
   { key: "productName", label: "Produktname",       pts: 10, tier: "required" },
   { key: "category",    label: "Kategorie",         pts: 20, tier: "critical" },
   { key: "grossWeightG",label: "Bruttogewicht",     pts: 15, tier: "critical" },
@@ -83,11 +83,11 @@ export function validateProductInput(data: ProductInput): {
   let score = 0;
 
   // Identity
-  if (!hasValue(data.sku)) {
-    errors.push("Pflichtfeld fehlt: SKU");
-    missingRequired.push("SKU");
+  if (!hasValue(data.ean)) {
+    errors.push("Pflichtfeld fehlt: EAN");
+    missingRequired.push("EAN");
   } else {
-    presentFields.push("sku");
+    presentFields.push("ean");
     score += 10;
   }
 
@@ -177,6 +177,9 @@ export function validateProductInput(data: ProductInput): {
     presentFields.push("netHeightMm");
     score += 6;
   }
+
+  // Suppress unused variable warning for SCORED_FIELDS
+  void SCORED_FIELDS;
 
   return {
     isValid: errors.length === 0,

@@ -10,7 +10,7 @@ import { computeDataQuality } from "@/lib/validation";
 
 interface Product {
   id: string;
-  sku: string;
+  ean: string;
   internalArticleNumber: string | null;
   productName: string;
   manufacturer: string | null;
@@ -322,7 +322,7 @@ function ProductsPageInner() {
               {!loading &&
                 data?.products.map((product) => {
                   const quality = computeDataQuality({
-                    sku: product.sku,
+                    ean: product.ean,
                     productName: product.productName,
                     manufacturer: product.manufacturer ?? undefined,
                     brand: product.brand ?? undefined,
@@ -342,7 +342,7 @@ function ProductsPageInner() {
                           href={`/products/${product.id}`}
                           className="font-mono text-xs text-blue-600 hover:underline"
                         >
-                          {product.sku}
+                          {product.ean}
                         </Link>
                         {product.internalArticleNumber && (
                           <div className="text-xs text-gray-400 font-mono">
