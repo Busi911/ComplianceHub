@@ -1,4 +1,5 @@
--- Rename sku → ean on Product table (idempotent: only if sku still exists)
+-- Rename sku → ean on Product table
+-- (IF EXISTS guard makes this safe against already-renamed DBs)
 DO $$
 BEGIN
   IF EXISTS (
@@ -9,13 +10,17 @@ BEGIN
   END IF;
 END $$;
 
--- Add Hersteller-Angaben fields (idempotent)
+-- Rename the unique index to match new column name
+DROP INDEX IF EXISTS "Product_sku_key";
+CREATE UNIQUE INDEX IF NOT EXISTS "Product_ean_key" ON "Product"("ean");
+
+-- Add Hersteller-Angaben fields
 ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrNetWeightG"   DOUBLE PRECISION;
 ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrGrossWeightG" DOUBLE PRECISION;
 ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrPlasticG"     DOUBLE PRECISION;
 ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "mfrPaperG"       DOUBLE PRECISION;
 
--- Create ManufacturerRequest table (idempotent)
+-- Create ManufacturerRequest table
 CREATE TABLE IF NOT EXISTS "ManufacturerRequest" (
     "id"               TEXT NOT NULL,
     "manufacturerName" TEXT NOT NULL,
@@ -27,7 +32,7 @@ CREATE TABLE IF NOT EXISTS "ManufacturerRequest" (
     CONSTRAINT "ManufacturerRequest_pkey" PRIMARY KEY ("id")
 );
 
--- Create ManufacturerRequestItem table (idempotent)
+-- Create ManufacturerRequestItem table
 CREATE TABLE IF NOT EXISTS "ManufacturerRequestItem" (
     "id"        TEXT NOT NULL,
     "requestId" TEXT NOT NULL,
@@ -37,14 +42,11 @@ CREATE TABLE IF NOT EXISTS "ManufacturerRequestItem" (
     CONSTRAINT "ManufacturerRequestItem_pkey" PRIMARY KEY ("id")
 );
 
--- Unique constraint (idempotent)
 CREATE UNIQUE INDEX IF NOT EXISTS "ManufacturerRequestItem_requestId_productId_key"
     ON "ManufacturerRequestItem"("requestId", "productId");
-
 CREATE INDEX IF NOT EXISTS "ManufacturerRequestItem_requestId_idx" ON "ManufacturerRequestItem"("requestId");
 CREATE INDEX IF NOT EXISTS "ManufacturerRequestItem_productId_idx" ON "ManufacturerRequestItem"("productId");
 
--- Foreign keys (idempotent)
 DO $$
 BEGIN
   IF NOT EXISTS (
