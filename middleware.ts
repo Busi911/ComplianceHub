@@ -20,8 +20,12 @@ const WRITE_PROTECTED_PREFIXES = [
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow the login page and its API route
-  if (pathname === LOGIN_PATH || pathname === "/api/auth/login") {
+  // Always allow the login page, its API route, and cron jobs (cron routes validate via CRON_SECRET)
+  if (
+    pathname === LOGIN_PATH ||
+    pathname === "/api/auth/login" ||
+    pathname.startsWith("/api/cron/")
+  ) {
     return NextResponse.next();
   }
 
