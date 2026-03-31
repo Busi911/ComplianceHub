@@ -4,11 +4,12 @@ import { updateProfileAfterSampling, cascadeReestimateCategory } from "@/lib/est
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const record = await prisma.samplingRecord.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: { productId: true },
     });
 
@@ -16,7 +17,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Record not found" }, { status: 404 });
     }
 
-    await prisma.samplingRecord.delete({ where: { id: params.id } });
+    await prisma.samplingRecord.delete({ where: { id } });
 
     // Re-run estimation after deletion
     await updateProfileAfterSampling(record.productId);
