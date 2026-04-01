@@ -17,9 +17,100 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const isDiagnose = new URL(request.url).searchParams.get("diagnose") === "true";
   const started = Date.now();
 
-  // Create a CronRun record at start so we can link history entries to it
+  // ── Diagnose mode: explain why products can't be estimated ──────────────────
+  if (isDiagnose) {
+    const [
+      totalEligible,
+      noCategory,
+      hasMfrData,
+      hasSamplingRecords,
+      categoriesWithSampling,
+    ] = await Promise.all([
+      prisma.product.count({
+        where: {
+          OR: [
+            { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
+            { packagingProfile: null },
+          ],
+        },
+      }),
+      prisma.product.count({
+        where: {
+          category: null,
+          OR: [
+            { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
+            { packagingProfile: null },
+          ],
+        },
+      }),
+      prisma.product.count({
+        where: {
+          OR: [{ mfrPlasticG: { not: null } }, { mfrPaperG: { not: null } }],
+          packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } },
+        },
+      }),
+      prisma.product.count({
+        where: {
+          samplingRecords: { some: { isOutlier: false } },
+          packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } },
+        },
+      }),
+      prisma.product.groupBy({
+        by: ["category"],
+        where: { samplingRecords: { some: { isOutlier: false } }, category: { not: null } },
+        _count: true,
+      }),
+    ]);
+
+    const sampledCategories = categoriesWithSampling.map((c) => c.category);
+
+    const eligibleWithCategory = await prisma.product.count({
+      where: {
+        category: { not: null },
+        OR: [
+          { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
+          { packagingProfile: null },
+        ],
+      },
+    });
+
+    const eligibleWithCategoryAndSampledRef = await prisma.product.count({
+      where: {
+        category: { in: sampledCategories as string[] },
+        OR: [
+          { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
+          { packagingProfile: null },
+        ],
+      },
+    });
+
+    return NextResponse.json({
+      diagnose: true,
+      totalEligible,
+      breakdown: {
+        noCategory,
+        hasMfrData,
+        hasSamplingRecords,
+        hasCategory: eligibleWithCategory,
+        categoryHasSampledRef: eligibleWithCategoryAndSampledRef,
+        categoryHasNoSampledRef: eligibleWithCategory - eligibleWithCategoryAndSampledRef,
+        sampledCategoriesCount: sampledCategories.length,
+        sampledCategories,
+      },
+      explanation: [
+        noCategory > 0 && `${noCategory} Produkte ohne Kategorie → keine Schätzung möglich`,
+        hasMfrData > 0 && `${hasMfrData} Produkte mit Hersteller-Daten → sollten geschätzt werden (Tier 1.5)`,
+        hasSamplingRecords > 0 && `${hasSamplingRecords} Produkte mit eigenen Stichproben → sollten geschätzt werden (Tier 1)`,
+        eligibleWithCategoryAndSampledRef === 0 && `Keine Kategorie hat gewogene Referenzprodukte → Tier 2/3/4 nicht verfügbar`,
+        eligibleWithCategoryAndSampledRef > 0 && `${eligibleWithCategoryAndSampledRef} Produkte in Kategorien mit Referenzwerten → sollten via Tier 2/3/4 schätzbar sein`,
+      ].filter(Boolean),
+    });
+  }
+
+  // ── Normal cron run ─────────────────────────────────────────────────────────
   const cronRun = await prisma.cronRun.create({
     data: { type: "reestimate", startedAt: new Date() },
   });
@@ -27,11 +118,7 @@ export async function GET(request: NextRequest) {
   const products = await prisma.product.findMany({
     where: {
       OR: [
-        {
-          packagingProfile: {
-            status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] },
-          },
-        },
+        { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
         { packagingProfile: null },
       ],
     },
@@ -45,6 +132,7 @@ export async function GET(request: NextRequest) {
 
   const total = products.length;
   let updated = 0;
+  let noChange = 0;
   let skipped = 0;
   let errors = 0;
 
@@ -120,9 +208,10 @@ export async function GET(request: NextRequest) {
                 method: result.method,
               },
             });
+            updated++;
+          } else {
+            noChange++;
           }
-
-          updated++;
         } catch {
           errors++;
         }
@@ -132,22 +221,14 @@ export async function GET(request: NextRequest) {
 
   const durationMs = Date.now() - started;
 
-  // Update CronRun with final stats
   await prisma.cronRun.update({
     where: { id: cronRun.id },
-    data: {
-      finishedAt: new Date(),
-      total,
-      updated,
-      skipped,
-      errors,
-      durationMs,
-    },
+    data: { finishedAt: new Date(), total, updated, skipped, errors, durationMs },
   });
 
   console.log(
-    `[cron/reestimate] ${updated} updated, ${skipped} skipped, ${errors} errors / ${total} eligible — ${durationMs}ms`
+    `[cron/reestimate] ${updated} updated, ${noChange} no-change, ${skipped} no-data, ${errors} errors / ${total} eligible — ${durationMs}ms`
   );
 
-  return NextResponse.json({ cronRunId: cronRun.id, total, updated, skipped, errors, durationMs });
+  return NextResponse.json({ cronRunId: cronRun.id, total, updated, noChange, skipped, errors, durationMs });
 }
