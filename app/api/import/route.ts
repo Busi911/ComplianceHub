@@ -238,6 +238,10 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const batchName = (formData.get("batchName") as string) || "Import";
     const dryRun = formData.get("dryRun") === "true";
+    // Chunked upload support: client sends batchId after the first chunk so we
+    // reuse the same ImportBatch record across all chunks.
+    const existingBatchId = (formData.get("batchId") as string) || null;
+    const totalRowCount = parseInt((formData.get("totalRowCount") as string) || "0", 10);
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -351,16 +355,24 @@ export async function POST(request: NextRequest) {
     let successCount = 0;
     let errorCount = 0;
 
-    // Create import batch record (even for dry run, so we can return batch info)
+    // Create import batch record (even for dry run, so we can return batch info).
+    // For chunked uploads the client passes the batchId from the first chunk so
+    // we reuse the same record instead of creating a new one each time.
     let batch: { id: string } | null = null;
     if (!dryRun) {
-      batch = await prisma.importBatch.create({
-        data: {
-          name: batchName,
-          sourceFileName: file.name,
-          rowCount: rows.length,
-        },
-      });
+      if (existingBatchId) {
+        batch = { id: existingBatchId };
+      } else {
+        batch = await prisma.importBatch.create({
+          data: {
+            name: batchName,
+            sourceFileName: file.name,
+            // totalRowCount comes from the client when chunking; fall back to
+            // the number of rows in this chunk for single-request uploads.
+            rowCount: totalRowCount > 0 ? totalRowCount : rows.length,
+          },
+        });
+      }
     }
 
     // Product IDs that need estimation after all DB writes are done.
@@ -601,11 +613,15 @@ export async function POST(request: NextRequest) {
       results.push(...batchResults);
     }
 
-    // Update batch counts
+    // Update batch counts — use increment so that parallel/chunked uploads
+    // accumulate correctly rather than overwriting each other's counts.
     if (!dryRun && batch) {
       await prisma.importBatch.update({
         where: { id: batch.id },
-        data: { successCount, errorCount },
+        data: {
+          successCount: { increment: successCount },
+          errorCount: { increment: errorCount },
+        },
       });
     }
 
