@@ -52,9 +52,12 @@ export async function GET() {
     const todayCount = dayCountMap[todayStr] ?? 0;
 
     // Streak — consecutive days ending today (or yesterday) with ≥1 record
-    const allDays = await prisma.$queryRaw<{ day: string }[]>`
-      SELECT DISTINCT DATE(sampled_at) as day FROM "SamplingRecord" ORDER BY day DESC
-    `;
+    const allRecords = await prisma.samplingRecord.findMany({
+      select: { sampledAt: true },
+      orderBy: { sampledAt: "desc" },
+    });
+    const distinctDays = [...new Set(allRecords.map((r) => r.sampledAt.toISOString().slice(0, 10)))];
+    const allDays = distinctDays.map((day) => ({ day }));
     let streak = 0;
     const checkDate = new Date(now);
     checkDate.setHours(0, 0, 0, 0);
