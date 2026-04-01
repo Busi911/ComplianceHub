@@ -51,6 +51,15 @@ const SAMPLE_CSV = `EAN;Interne Art.-Nr.;Produktname;Hersteller;Marke;Kategorie;
 5099206069497;ART-004;Logitech MX Master 3;Logitech;Logitech;Zubehoer;Maus;65.00;141;182;128;85;44;152;102;65;150
 6935364084813;ART-005;TP-Link CAT6 Patchkabel;TP-Link;TP-Link;Zubehoer;Kabel;3.50;45;80;200;10;5;210;120;30;1200`;
 
+interface RecentBatch {
+  id: string;
+  name: string;
+  importedAt: string;
+  rowCount: number;
+  successCount: number;
+  errorCount: number;
+}
+
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [batchName, setBatchName] = useState("");
@@ -61,9 +70,17 @@ export default function ImportPage() {
   const [dragOver, setDragOver] = useState(false);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [totalMs, setTotalMs] = useState<number | null>(null);
+  const [recentBatches, setRecentBatches] = useState<RecentBatch[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const startTimeRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then((r) => r.json())
+      .then((d) => { if (!d.error && d.recentImportBatches) setRecentBatches(d.recentImportBatches); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -555,6 +572,34 @@ export default function ImportPage() {
           </div>
         </div>
       </div>
+
+      {/* Recent imports */}
+      {recentBatches.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <h2 className="font-semibold text-gray-900 mb-3">Letzte Imports</h2>
+          <div className="space-y-2">
+            {recentBatches.map((batch) => (
+              <div key={batch.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-800 truncate">{batch.name}</div>
+                  <div className="text-xs text-gray-400">
+                    {batch.rowCount} Zeilen · {batch.successCount} erfolgreich
+                    {batch.errorCount > 0 && (
+                      <span className="text-red-500 ml-1">· {batch.errorCount} Fehler</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 flex-shrink-0">
+                  {new Date(batch.importedAt).toLocaleDateString("de-DE", {
+                    day: "2-digit", month: "2-digit", year: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

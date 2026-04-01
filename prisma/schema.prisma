@@ -107,9 +107,24 @@ model ImportBatch {
   products       Product[]
 }
 
+model CronRun {
+  id         String   @id @default(cuid())
+  type       String   @default("reestimate")
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  total      Int      @default(0)
+  updated    Int      @default(0)
+  skipped    Int      @default(0)
+  errors     Int      @default(0)
+  durationMs Int?
+
+  historyEntries ProductEstimateHistory[]
+}
+
 model ProductEstimateHistory {
   id          String   @id @default(cuid())
   productId   String
+  cronRunId   String?
   oldPlasticG Float?
   oldPaperG   Float?
   newPlasticG Float?
@@ -119,8 +134,11 @@ model ProductEstimateHistory {
   createdAt   DateTime @default(now())
 
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cronRun     CronRun? @relation(fields: [cronRunId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  @@index([cronRunId])
+  @@index([createdAt])
 }
 
 model AuditLog {
