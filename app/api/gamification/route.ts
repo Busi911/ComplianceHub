@@ -93,28 +93,33 @@ export async function GET() {
       where: { samplingRecords: { some: {} } },
     });
 
-    // Avg absolute estimation error
-    const profilesWithError = await prisma.productPackagingProfile.findMany({
-      where: { estimationErrorPct: { not: null } },
-      select: { estimationErrorPct: true },
-    });
+    // Avg absolute estimation error — use raw aggregate to avoid fetching all rows
+    const errorAgg = await prisma.$queryRawUnsafe<{ avg_abs: number | null; cnt: bigint }[]>(
+      `SELECT AVG(ABS("estimationErrorPct")) as avg_abs, COUNT(*) as cnt
+       FROM "ProductPackagingProfile"
+       WHERE "estimationErrorPct" IS NOT NULL`
+    );
     const avgEstimationErrorAbs =
-      profilesWithError.length > 0
-        ? profilesWithError.reduce((sum, p) => sum + Math.abs(p.estimationErrorPct!), 0) /
-          profilesWithError.length
-        : null;
+      errorAgg[0] && Number(errorAgg[0].cnt) > 0 ? Number(errorAgg[0].avg_abs) : null;
 
-    // Category progress
-    const allProducts = await prisma.product.findMany({
+    // Category progress — use groupBy instead of fetching all 70k+ product rows
+    const totalByCategory = await prisma.product.groupBy({
+      by: ["category"],
       where: { category: { not: null } },
-      select: { category: true, samplingRecords: { select: { id: true }, take: 1 } },
+      _count: { id: true },
     });
+    const sampledByCategory = await prisma.product.groupBy({
+      by: ["category"],
+      where: { category: { not: null }, samplingRecords: { some: {} } },
+      _count: { id: true },
+    });
+    const sampledMap = Object.fromEntries(
+      sampledByCategory.map((r) => [r.category, r._count.id])
+    );
     const catMap: Record<string, { total: number; sampled: number }> = {};
-    for (const p of allProducts) {
-      const cat = p.category!;
-      if (!catMap[cat]) catMap[cat] = { total: 0, sampled: 0 };
-      catMap[cat].total++;
-      if (p.samplingRecords.length > 0) catMap[cat].sampled++;
+    for (const r of totalByCategory) {
+      const cat = r.category!;
+      catMap[cat] = { total: r._count.id, sampled: sampledMap[cat] ?? 0 };
     }
     const categoryProgress = Object.entries(catMap)
       .map(([category, { total, sampled }]) => ({
