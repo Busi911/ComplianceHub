@@ -29,12 +29,26 @@ interface BufferStats {
   items: BufferItem[];
 }
 
+interface Session {
+  sourceFileName: string;
+  total: number;
+  matched: number;
+  unmatched: number;
+  firstAt: string;
+  lastAt: string;
+}
+
 export default function ManufacturerBufferPage() {
   const [stats, setStats] = useState<BufferStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "unmatched" | "matched">("all");
   const [eanSearch, setEanSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  // Sessions state
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [resettingSession, setResettingSession] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ sourceFileName: string; deleted: number; productsReset: number } | null>(null);
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -56,13 +70,37 @@ export default function ManufacturerBufferPage() {
     if (filter === "matched") params.set("matched", "true");
     if (eanSearch.trim()) params.set("ean", eanSearch.trim());
 
-    fetch(`/api/manufacturer-buffer?${params}`)
-      .then((r) => r.json())
-      .then(setStats)
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch(`/api/manufacturer-buffer?${params}`).then((r) => r.json()),
+      fetch("/api/manufacturer-buffer/sessions").then((r) => r.json()),
+    ]).then(([bufferData, sessionData]) => {
+      setStats(bufferData);
+      if (sessionData.sessions) setSessions(sessionData.sessions);
+    }).finally(() => setLoading(false));
   }
 
   useEffect(() => { fetchData(); }, [filter, page, eanSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleResetSession(sourceFileName: string) {
+    if (!confirm(`Session „${sourceFileName}" wirklich zurücksetzen?\n\nDas löscht alle Puffer-Einträge dieser Session und entfernt die Hersteller-Daten von den gematchten Produkten. Die Produkte werden danach neu geschätzt.`)) return;
+    setResettingSession(sourceFileName);
+    setResetResult(null);
+    try {
+      const res = await fetch("/api/manufacturer-buffer/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceFileName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Fehler");
+      setResetResult({ sourceFileName, ...data });
+      fetchData();
+    } catch (e) {
+      alert(`Fehler: ${e instanceof Error ? e.message : "Unbekannt"}`);
+    } finally {
+      setResettingSession(null);
+    }
+  }
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -156,6 +194,45 @@ export default function ManufacturerBufferPage() {
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-green-700">{stats.matchedCount}</div>
             <div className="text-xs text-green-600 mt-1">Erfolgreich zugeordnet</div>
+          </div>
+        </div>
+      )}
+
+      {/* Sessions */}
+      {sessions.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
+          <h2 className="font-semibold text-gray-800">Upload-Sessions</h2>
+          {resetResult && (
+            <div className="text-sm bg-green-50 border border-green-200 rounded px-3 py-2 text-green-800">
+              ✓ Session „{resetResult.sourceFileName}" zurückgesetzt — {resetResult.deleted} Einträge gelöscht,
+              {" "}{resetResult.productsReset} Produkte werden neu geschätzt.
+            </div>
+          )}
+          <div className="divide-y divide-gray-100">
+            {sessions.map((session) => (
+              <div key={session.sourceFileName} className="flex items-center gap-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-800 truncate">{session.sourceFileName}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {new Date(session.lastAt).toLocaleDateString("de-DE", {
+                      day: "2-digit", month: "2-digit", year: "numeric",
+                      hour: "2-digit", minute: "2-digit",
+                    })}
+                    {" · "}
+                    {session.total} Einträge
+                    {session.matched > 0 && <span className="text-green-600"> · {session.matched} gematcht</span>}
+                    {session.unmatched > 0 && <span className="text-amber-600"> · {session.unmatched} offen</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleResetSession(session.sourceFileName)}
+                  disabled={resettingSession === session.sourceFileName}
+                  className="flex-shrink-0 text-sm border border-red-200 text-red-600 px-3 py-1.5 rounded hover:bg-red-50 disabled:opacity-50 whitespace-nowrap"
+                >
+                  {resettingSession === session.sourceFileName ? "Wird zurückgesetzt…" : "↺ Zurücksetzen"}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
