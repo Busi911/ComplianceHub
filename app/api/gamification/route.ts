@@ -52,17 +52,13 @@ export async function GET() {
     const todayCount = dayCountMap[todayStr] ?? 0;
 
     // Streak — consecutive days ending today (or yesterday) with ≥1 record
-    // Limit to 400 days (no meaningful streak exceeds that) to avoid a driver
-    // bug where an unbounded findMany triggers "N parameter formats but 0 parameters".
-    const fourHundredDaysAgo = new Date(now);
-    fourHundredDaysAgo.setDate(fourHundredDaysAgo.getDate() - 400);
-    const streakRecords = await prisma.samplingRecord.findMany({
-      where: { sampledAt: { gte: fourHundredDaysAgo } },
-      select: { sampledAt: true },
-      orderBy: { sampledAt: "desc" },
-    });
-    const distinctDays = [...new Set(streakRecords.map((r) => r.sampledAt.toISOString().slice(0, 10)))];
-    const allDays = distinctDays.map((day) => ({ day }));
+    // Use raw SQL to fetch only distinct dates (≤ a few hundred rows) instead of
+    // all individual records, which triggers a Prisma driver bug with large result
+    // sets ("N parameter formats but 0 parameters"). Column must be quoted as
+    // "sampledAt" — Prisma preserves camelCase in PostgreSQL without @map.
+    const allDays = await prisma.$queryRawUnsafe<{ day: string }[]>(
+      `SELECT DISTINCT DATE("sampledAt") as day FROM "SamplingRecord" ORDER BY day DESC`
+    );
     let streak = 0;
     const checkDate = new Date(now);
     checkDate.setHours(0, 0, 0, 0);
