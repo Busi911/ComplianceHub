@@ -65,7 +65,27 @@ export default function EstimationRulesPage() {
               <p className="text-sm text-gray-600 mt-1">
                 Echte Wiegungen dieses Produkts — Durchschnitt aller <strong>nicht-markierten</strong> Messungen (Ausreißer werden automatisch erkannt und ausgeschlossen).
               </p>
-              <div className="mt-1 text-xs text-gray-400 font-mono">Konfidenz = min(0.50 + n × 0.15, 0.95)</div>
+              <div className="mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 space-y-0.5">
+                <div className="text-gray-700">Kunststoff = Mittelwert(measuredPlasticG) — Ausreißer ausgeschlossen</div>
+                <div className="text-gray-700">Papier     = Mittelwert(measuredPaperG)   — Ausreißer ausgeschlossen</div>
+                <div className="text-gray-500 mt-1">Konfidenz  = min(0.70 + n × 0.10, 0.95)</div>
+                <div className="text-gray-400 pl-4">n=1 → 0.80 · n=2 → 0.90 · n≥3 → 0.95</div>
+              </div>
+            </div>
+          </li>
+          <li className="flex gap-4">
+            <div className="flex-shrink-0 w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center font-bold text-sm" style={{fontSize:"10px"}}>1.5</div>
+            <div>
+              <div className="font-medium text-gray-900">Hersteller-Angaben <span className="ml-2 px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">manufacturer_data</span></div>
+              <p className="text-sm text-gray-600 mt-1">
+                Wenn der Hersteller Kunststoff- oder Papierwerte direkt geliefert hat (via Hersteller-Puffer oder Import), werden diese direkt übernommen — ohne Schätzung.
+                Greift nur wenn <strong>keine eigenen Stichproben</strong> vorhanden sind.
+              </p>
+              <div className="mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 space-y-0.5">
+                <div className="text-gray-700">Kunststoff = mfrPlasticG  (direkt vom Hersteller)</div>
+                <div className="text-gray-700">Papier     = mfrPaperG    (direkt vom Hersteller)</div>
+                <div className="text-gray-500 mt-1">Konfidenz  = 0.80 (fest)</div>
+              </div>
             </div>
           </li>
           <li className="flex gap-4">
@@ -75,7 +95,13 @@ export default function EstimationRulesPage() {
               <p className="text-sm text-gray-600 mt-1">
                 Produkte mit gleicher Kategorie, Marke, Gewicht oder Preis. Ausreißer-Messungen der Referenzprodukte werden ebenfalls ausgeschlossen.
               </p>
-              <div className="mt-1 text-xs text-gray-400 font-mono">Konfidenz = 0.20 + (Punkte / 20) × 0.58</div>
+              <div className="mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 space-y-0.5">
+                <div className="text-gray-700">Kunststoff = Mittelwert(measuredPlasticG aller Treffer)</div>
+                <div className="text-gray-700">Papier     = Mittelwert(measuredPaperG aller Treffer)</div>
+                <div className="text-gray-500 mt-1">score      = Ähnlichkeitspunkte des besten Treffers (max. 20)</div>
+                <div className="text-gray-500">Konfidenz  = round(0.20 + min(score / 20, 1) × 0.58, 2)</div>
+                <div className="text-gray-400 pl-4">Bereich: 0.20 – 0.78</div>
+              </div>
             </div>
           </li>
           <li className="flex gap-4">
@@ -87,10 +113,17 @@ export default function EstimationRulesPage() {
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 Wenn Bruttogewicht und Kunststoffgewicht in der Kategorie stark korrelieren (r² ≥ 0,40, n ≥ 5),
-                wird eine <strong>lineare Regression</strong> verwendet: <em>Plastik = a + b × Bruttogewicht</em>.
+                wird eine <strong>lineare Regression</strong> verwendet.
                 Besser als der Kategorie-Durchschnitt, weil die Schätzung an das konkrete Produktgewicht angepasst wird.
               </p>
-              <div className="mt-1 text-xs text-gray-400 font-mono">Konfidenz = 0.20 + r² × 0.50 (max. 0.70)</div>
+              <div className="mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 space-y-0.5">
+                <div className="text-gray-700">Kunststoff = max(0, a_p + b_p × bruttogewichtG)  — wenn r²_plastik ≥ 0.40</div>
+                <div className="text-gray-700">Papier     = max(0, a_pa + b_pa × bruttogewichtG) — wenn r²_papier ≥ 0.30</div>
+                <div className="text-gray-500 mt-1">a, b = OLS-Koeffizienten (Ordinary Least Squares, n ≥ 5)</div>
+                <div className="text-gray-500">bestR2    = max(r²_plastik, r²_papier)</div>
+                <div className="text-gray-500">Konfidenz = round(0.20 + bestR2 × 0.50, 2)  — Deckel: 0.70</div>
+                <div className="text-gray-400 pl-4">r²=0.40 → 0.40 · r²=0.60 → 0.50 · r²=1.00 → 0.70</div>
+              </div>
             </div>
           </li>
           <li className="flex gap-4">
@@ -98,9 +131,13 @@ export default function EstimationRulesPage() {
             <div>
               <div className="font-medium text-gray-900">Kategorie-Durchschnitt <span className="ml-2 px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-800">category_avg_nX</span></div>
               <p className="text-sm text-gray-600 mt-1">
-                Fallback: Durchschnitt aller gemessenen Produkte in der Kategorie (ohne Ausreißer). Ungenaueste Methode.
+                Fallback: Durchschnitt aller gemessenen Produkte in der Kategorie (ohne Ausreißer, max. 50). Ungenaueste Methode.
               </p>
-              <div className="mt-1 text-xs text-gray-400 font-mono">Konfidenz = 0.20 (fest)</div>
+              <div className="mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 space-y-0.5">
+                <div className="text-gray-700">Kunststoff = Mittelwert(measuredPlasticG aller Kategorie-Produkte, max. 50)</div>
+                <div className="text-gray-700">Papier     = Mittelwert(measuredPaperG aller Kategorie-Produkte, max. 50)</div>
+                <div className="text-gray-500 mt-1">Konfidenz  = 0.20 (fest)</div>
+              </div>
             </div>
           </li>
           <li className="flex gap-4">
@@ -124,20 +161,26 @@ export default function EstimationRulesPage() {
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="font-medium text-blue-900 text-sm mb-1">IQR-Methode (Tukey-Fences) — primär</div>
-            <p className="text-xs text-blue-700">
-              Berechnet Q1 (25%-Quantil) und Q3 (75%-Quantil). Werte außerhalb von
-              <strong> [Q1 − 1,5×IQR, Q3 + 1,5×IQR]</strong> werden als Ausreißer markiert.
-              Robuster als der Z-Score — funktioniert auch bei schiefen Verteilungen.
+            <div className="font-medium text-blue-900 text-sm mb-2">IQR-Methode (Tukey-Fences) — primär</div>
+            <p className="text-xs text-blue-700 mb-2">
+              Robuster als Z-Score — funktioniert auch bei schiefen Verteilungen.
             </p>
+            <div className="text-xs font-mono bg-white/60 rounded p-2 space-y-0.5 text-blue-900">
+              <div>IQR   = Q3 − Q1</div>
+              <div>untere Grenze = Q1 − 1.5 × IQR</div>
+              <div>obere Grenze  = Q3 + 1.5 × IQR</div>
+              <div className="text-blue-600 mt-1">→ Ausreißer wenn: wert &lt; untere oder wert &gt; obere</div>
+            </div>
           </div>
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="font-medium text-purple-900 text-sm mb-1">Z-Score — sekundär</div>
-            <p className="text-xs text-purple-700">
-              Berechnet wie viele Standardabweichungen ein Wert vom Mittelwert abweicht.
-              Bei <strong>|z| &gt; 2,5</strong> wird der Wert zusätzlich markiert.
-              Greift erst ab 3 eigenen Messungen.
+            <div className="font-medium text-purple-900 text-sm mb-2">Z-Score — sekundär</div>
+            <p className="text-xs text-purple-700 mb-2">
+              Greift zusätzlich — ein Wert muss nur <em>eine</em> der beiden Bedingungen erfüllen.
             </p>
+            <div className="text-xs font-mono bg-white/60 rounded p-2 space-y-0.5 text-purple-900">
+              <div>z = |wert − Mittelwert| / Standardabweichung</div>
+              <div className="text-purple-600 mt-1">→ Ausreißer wenn: z &gt; 2.5</div>
+            </div>
           </div>
         </div>
         <div className="mt-3 text-xs text-gray-400">
