@@ -71,9 +71,13 @@ export default function ImportPage() {
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [totalMs, setTotalMs] = useState<number | null>(null);
   const [recentBatches, setRecentBatches] = useState<RecentBatch[]>([]);
+  const [chunkProgress, setChunkProgress] = useState<{ current: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const startTimeRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Rows per request — sized to finish well within Vercel's 60-second limit.
+  const CHUNK_SIZE = 150;
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -113,33 +117,107 @@ export default function ImportPage() {
     setResult(null);
     setTotalMs(null);
     setElapsedMs(0);
+    setChunkProgress(null);
     startTimeRef.current = Date.now();
     timerRef.current = setInterval(() => {
       setElapsedMs(Date.now() - (startTimeRef.current ?? Date.now()));
     }, 100);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("batchName", batchName || file.name);
-      formData.append("dryRun", dryRun ? "true" : "false");
+      // ── Decode the file client-side (mirrors server decodeBuffer logic) ──────
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
 
-      const res = await fetch("/api/import", {
-        method: "POST",
-        body: formData,
-      });
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let data: any;
-      try {
-        data = await res.json();
-      } catch {
-        // Server returned non-JSON (e.g. 413 Request Entity Too Large)
-        if (res.status === 413) throw new Error("Datei zu groß — maximale Größe: 50 MB");
-        throw new Error(`Server-Fehler ${res.status}`);
+      let text: string;
+      if (uint8[0] === 0xef && uint8[1] === 0xbb && uint8[2] === 0xbf) {
+        // UTF-8 BOM
+        text = new TextDecoder("utf-8").decode(uint8.slice(3));
+      } else {
+        const utf8Attempt = new TextDecoder("utf-8").decode(uint8);
+        if (!utf8Attempt.includes("\uFFFD")) {
+          text = utf8Attempt;
+        } else {
+          // Fall back to Windows-1252 (German Excel exports)
+          try {
+            text = new TextDecoder("windows-1252").decode(uint8);
+          } catch {
+            text = utf8Attempt;
+          }
+        }
       }
-      if (!res.ok) throw new Error(data.error);
-      setResult(data);
+
+      // ── Split into header + data lines ────────────────────────────────────────
+      const allLines = text.split(/\r?\n/);
+      // Keep the raw header line; filter only truly blank data lines
+      const headerLine = allLines[0] ?? "";
+      const dataLines = allLines.slice(1).filter((l) => l.trim() !== "");
+      const totalRows = dataLines.length;
+
+      if (totalRows === 0) {
+        throw new Error("CSV-Datei ist leer oder enthält nur den Header");
+      }
+
+      const totalChunks = Math.ceil(totalRows / CHUNK_SIZE);
+
+      // ── Send chunks sequentially ──────────────────────────────────────────────
+      let mergedResult: ImportResult | null = null;
+      let currentBatchId: string | null = null;
+
+      for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+        setChunkProgress({ current: chunkIdx + 1, total: totalChunks });
+
+        const chunkDataLines = dataLines.slice(
+          chunkIdx * CHUNK_SIZE,
+          (chunkIdx + 1) * CHUNK_SIZE,
+        );
+        const chunkCsv = [headerLine, ...chunkDataLines].join("\n");
+        const chunkBlob = new Blob([chunkCsv], { type: "text/csv;charset=utf-8" });
+        const chunkFile = new File([chunkBlob], file.name, { type: "text/csv" });
+
+        const formData = new FormData();
+        formData.append("file", chunkFile);
+        formData.append("batchName", batchName || file.name);
+        formData.append("dryRun", dryRun ? "true" : "false");
+        formData.append("totalRowCount", String(totalRows));
+        if (currentBatchId) {
+          formData.append("batchId", currentBatchId);
+        }
+
+        const res = await fetch("/api/import", { method: "POST", body: formData });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let data: any;
+        try {
+          data = await res.json();
+        } catch {
+          if (res.status === 413) throw new Error("Datei zu groß — maximale Größe: 50 MB");
+          throw new Error(`Server-Fehler ${res.status}`);
+        }
+        if (!res.ok) throw new Error(data.error ?? "Unbekannter Fehler");
+
+        // Capture the batch ID from the first chunk so subsequent chunks reuse it
+        if (!currentBatchId && data.batchId) {
+          currentBatchId = data.batchId;
+        }
+
+        if (!mergedResult) {
+          mergedResult = { ...data, totalRows };
+        } else {
+          // Offset per-chunk row numbers to be relative to the full file
+          const rowOffset = chunkIdx * CHUNK_SIZE;
+          mergedResult.successCount += data.successCount;
+          mergedResult.errorCount += data.errorCount;
+          mergedResult.results.push(
+            ...data.results.map((r: ImportRow) => ({ ...r, row: r.row + rowOffset })),
+          );
+          // batchId, columnMappings, detectedDelimiter come from first chunk — keep them
+        }
+      }
+
+      if (mergedResult) {
+        mergedResult.totalRows = totalRows;
+        setResult(mergedResult);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler");
     } finally {
@@ -147,6 +225,7 @@ export default function ImportPage() {
       const duration = Date.now() - (startTimeRef.current ?? Date.now());
       setTotalMs(duration);
       setElapsedMs(null);
+      setChunkProgress(null);
       setLoading(false);
     }
   }
@@ -285,7 +364,9 @@ export default function ImportPage() {
             className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading
-              ? `Importiert… ${elapsedMs != null ? formatMs(elapsedMs) : ""}`
+              ? chunkProgress && chunkProgress.total > 1
+                ? `Teil ${chunkProgress.current}/${chunkProgress.total} … ${elapsedMs != null ? formatMs(elapsedMs) : ""}`
+                : `Importiert… ${elapsedMs != null ? formatMs(elapsedMs) : ""}`
               : dryRun
                 ? "Vorschau starten"
                 : "Jetzt importieren"}
