@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyReach } from "@/lib/ai-classify";
+import { fetchCorrectionExamples } from "./corrections";
 
 // High-risk categories for SVHC
 const HIGH_RISK_KEYWORDS = [
@@ -35,7 +36,8 @@ export async function estimateReach(productId: string, noAi = false): Promise<vo
 
   let aiResult = null;
   if (ruleRisk !== "low" && !noAi) {
-    aiResult = await classifyReach(product.productName, product.category, product.subcategory);
+    const examples = await fetchCorrectionExamples("reach", product.category);
+    aiResult = await classifyReach(product.productName, product.category, product.subcategory, examples);
   }
 
   const svhcRisk = aiResult?.svhcRisk ?? ruleRisk;

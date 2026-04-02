@@ -37,6 +37,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { href: "/compliance-hub/rohs", label: "RoHS" },
       { href: "/compliance-hub/eudr", label: "EUDR" },
       { href: "/compliance-hub/pop", label: "POP" },
+      { href: "/compliance-hub/corrections", label: "Korrekturen & Lernen" },
     ],
   },
   {

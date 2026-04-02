@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyEudr } from "@/lib/ai-classify";
+import { fetchCorrectionExamples } from "./corrections";
 
 // Products commonly associated with regulated commodities
 const COMMODITY_RULES: Array<[string, string[]]> = [
@@ -61,7 +62,8 @@ export async function estimateEudr(productId: string, noAi = false): Promise<voi
   let method = ruleCommodities.length > 0 ? "category_rule" : "none";
 
   if (ruleCommodities.length === 0 && !noAi) {
-    aiResult = await classifyEudr(product.productName, product.category, product.subcategory);
+    const examples = await fetchCorrectionExamples("eudr", product.category);
+    aiResult = await classifyEudr(product.productName, product.category, product.subcategory, examples);
     if (aiResult) {
       commodities = aiResult.commodities;
       confidence = Math.min(0.70, aiResult.confidence);

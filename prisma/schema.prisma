@@ -47,6 +47,7 @@ model Product {
   auditLogs        AuditLog[]               @relation("ProductAuditLogs")
   manufacturerRequestItems ManufacturerRequestItem[]
   manufacturerBufferMatches ManufacturerDataBuffer[]
+  complianceCorrections ComplianceCorrection[]
   complianceScore  ProductComplianceScore?
   batteryProfile   ProductBatteryProfile?
   weeeProfile      ProductWeeeProfile?
@@ -230,6 +231,24 @@ model ManufacturerDataBuffer {
   @@index([ean])
   @@index([internalArticleNr])
   @@index([matchedProductId])
+}
+
+// Tracks manual user corrections to compliance classifications.
+// Used for audit trail and as few-shot learning examples for AI.
+model ComplianceCorrection {
+  id              String   @id @default(cuid())
+  productId       String
+  module          String   // "battery"|"weee"|"levy"|"reach"|"rohs"|"eudr"|"pop"
+  correctedFields String   // JSON: { fieldName: { old, new } }
+  productName     String?  // denormalized snapshot for AI examples
+  productCategory String?  // denormalized snapshot for AI examples
+  createdAt       DateTime @default(now())
+
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([module, productCategory])
+  @@index([productId])
+  @@index([createdAt])
 }
 
 model SamplingPreset {

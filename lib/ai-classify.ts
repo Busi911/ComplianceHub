@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import type { CorrectionExample } from "@/lib/compliance/corrections";
+import { formatExamplesForPrompt } from "@/lib/compliance/corrections";
 
 let _client: Anthropic | null = null;
 
@@ -54,6 +56,7 @@ export async function classifyBattery(
   productName: string,
   category: string | null,
   subcategory: string | null,
+  examples: CorrectionExample[] = [],
 ): Promise<BatteryAiResult | null> {
   const system = `Du bist BattDG-Spezialist für die Klassifizierung von Produkten nach dem Batteriegesetz.
 Antworte ausschließlich als JSON-Objekt ohne weitere Erklärungen:
@@ -63,7 +66,7 @@ Antworte ausschließlich als JSON-Objekt ohne weitere Erklärungen:
   "isRemovable": boolean (nur wenn containsBattery=true),
   "confidence": 0.0-1.0,
   "reasoning": "kurze Begründung auf Deutsch"
-}`;
+}${formatExamplesForPrompt(examples)}`;
 
   const user = `Produkt: ${productName}
 Kategorie: ${category ?? "unbekannt"}
@@ -95,6 +98,7 @@ export async function classifyWeee(
   productName: string,
   category: string | null,
   subcategory: string | null,
+  examples: CorrectionExample[] = [],
 ): Promise<WeeeAiResult | null> {
   const system = `Du bist ElektroG-Spezialist. Bestimme, ob ein Produkt unter das Elektro- und Elektronikgerätegesetz (ElektroG) fällt.
 Antworte ausschließlich als JSON-Objekt:
@@ -103,7 +107,7 @@ Antworte ausschließlich als JSON-Objekt:
   "weeeCategory": "HAUSHALTSGROSSE_GERATE"|"HAUSHALTSKLEINGERATE"|"IT_TELEKOMMUNIKATION"|"UNTERHALTUNGSELEKTRONIK"|"BELEUCHTUNG"|"WERKZEUGE"|"SPIELZEUG_FREIZEIT_SPORT"|"MEDIZINPRODUKTE"|"UEBERWACHUNGS_INSTRUMENTE"|"AUTOMATEN" (nur wenn isElectronic=true),
   "confidence": 0.0-1.0,
   "reasoning": "kurze Begründung auf Deutsch"
-}`;
+}${formatExamplesForPrompt(examples)}`;
 
   const user = `Produkt: ${productName}
 Kategorie: ${category ?? "unbekannt"}
@@ -134,6 +138,7 @@ export async function classifyLevy(
   productName: string,
   category: string | null,
   subcategory: string | null,
+  examples: CorrectionExample[] = [],
 ): Promise<LevyAiResult | null> {
   const system = `Du bist Spezialist für die Urheberrechtsabgabe §54 UrhG (Geräteabgabe ZPÜ).
 Bestimme, ob das Produkt abgabepflichtig ist (Drucker/Scanner, USB-Sticks, SSDs, Speicherkarten, optische Medien, Tablets, Smartphones, PCs, Laptops).
@@ -143,7 +148,7 @@ Antworte ausschließlich als JSON-Objekt:
   "levyCategory": "PRINTER_SCANNER_COPIER"|"USB_STICK"|"SSD_HDD"|"MEMORY_CARD"|"OPTICAL_MEDIA"|"TABLET_SMARTPHONE"|"PC_LAPTOP"|"NOT_APPLICABLE",
   "confidence": 0.0-1.0,
   "reasoning": "kurze Begründung auf Deutsch"
-}`;
+}${formatExamplesForPrompt(examples)}`;
 
   const user = `Produkt: ${productName}
 Kategorie: ${category ?? "unbekannt"}
@@ -171,6 +176,7 @@ export async function classifyReach(
   productName: string,
   category: string | null,
   subcategory: string | null,
+  examples: CorrectionExample[] = [],
 ): Promise<ReachAiResult | null> {
   const system = `Du bist REACH-Spezialist. Bewerte das SVHC-Risiko eines Produkts (besonders besorgniserregende Stoffe).
 Hinweis: KI kann keine exakten Konzentrationen bestimmen. Maximale Confidence: 0.40.
@@ -180,7 +186,7 @@ Antworte ausschließlich als JSON-Objekt:
   "possibleSvhcCategories": ["z.B. Weichmacher", "Flammschutzmittel"],
   "confidence": 0.0-0.40,
   "reasoning": "kurze Begründung auf Deutsch"
-}`;
+}${formatExamplesForPrompt(examples)}`;
 
   const user = `Produkt: ${productName}
 Kategorie: ${category ?? "unbekannt"}
@@ -208,6 +214,7 @@ export async function classifyRohs(
   category: string | null,
   subcategory: string | null,
   isElectronic: boolean | null,
+  examples: CorrectionExample[] = [],
 ): Promise<RohsAiResult | null> {
   const system = `Du bist RoHS-Spezialist. Bestimme, ob das Produkt unter die RoHS-Richtlinie fällt (Beschränkung gefährlicher Stoffe in Elektro- und Elektronikgeräten).
 Antworte ausschließlich als JSON-Objekt:
@@ -215,7 +222,7 @@ Antworte ausschließlich als JSON-Objekt:
   "rohsApplicable": boolean,
   "confidence": 0.0-1.0,
   "reasoning": "kurze Begründung auf Deutsch"
-}`;
+}${formatExamplesForPrompt(examples)}`;
 
   const user = `Produkt: ${productName}
 Kategorie: ${category ?? "unbekannt"}
@@ -245,6 +252,7 @@ export async function classifyEudr(
   productName: string,
   category: string | null,
   subcategory: string | null,
+  examples: CorrectionExample[] = [],
 ): Promise<EudrAiResult | null> {
   const system = `Du bist EUDR-Spezialist (EU-Entwaldungsverordnung). Bestimme, ob das Produkt regulierte Rohstoffe enthält:
 Holz, Kautschuk, Soja, Palmöl, Rind (Leder/Fleisch), Kaffee, Kakao und daraus hergestellte Produkte.
@@ -255,7 +263,7 @@ Antworte ausschließlich als JSON-Objekt:
   "dueDiligenceRequired": boolean,
   "confidence": 0.0-1.0,
   "reasoning": "kurze Begründung auf Deutsch"
-}`;
+}${formatExamplesForPrompt(examples)}`;
 
   const user = `Produkt: ${productName}
 Kategorie: ${category ?? "unbekannt"}

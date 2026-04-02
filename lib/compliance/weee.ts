@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyWeee } from "@/lib/ai-classify";
+import { fetchCorrectionExamples } from "./corrections";
 
 const CATEGORY_RULES: Array<[string, string]> = [
   ["kühlschrank",   "HAUSHALTSGROSSE_GERATE"],
@@ -76,7 +77,8 @@ export async function estimateWeee(productId: string, noAi = false): Promise<voi
   // 2. AI classification (skip if noAi=true)
   let aiResult = null;
   if (!ruleResult && !noAi) {
-    aiResult = await classifyWeee(product.productName, product.category, product.subcategory);
+    const examples = await fetchCorrectionExamples("weee", product.category);
+    aiResult = await classifyWeee(product.productName, product.category, product.subcategory, examples);
   }
 
   const isElectronic = ruleResult?.isElectronic ?? aiResult?.isElectronic ?? null;

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyBattery } from "@/lib/ai-classify";
+import { fetchCorrectionExamples } from "./corrections";
 
 // Category-based rules: [categoryKeyword, batteryType, isRemovable]
 const CATEGORY_RULES: Array<[string, string, boolean]> = [
@@ -55,7 +56,8 @@ export async function estimateBattery(productId: string, noAi = false): Promise<
   // 2. AI classification (skip if noAi=true)
   let aiResult = null;
   if (!ruleResult && !noAi) {
-    aiResult = await classifyBattery(product.productName, product.category, product.subcategory);
+    const examples = await fetchCorrectionExamples("battery", product.category);
+    aiResult = await classifyBattery(product.productName, product.category, product.subcategory, examples);
   }
 
   const containsBattery = ruleResult?.containsBattery ?? aiResult?.containsBattery ?? null;

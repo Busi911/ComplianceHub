@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { classifyLevy } from "@/lib/ai-classify";
+import { fetchCorrectionExamples } from "./corrections";
 
 // ZPÜ tariff rates (as of 2024, to be reviewed annually)
 export const LEVY_RATES: Record<string, number> = {
@@ -71,7 +72,8 @@ export async function estimateLevy(productId: string, noAi = false): Promise<voi
   // 2. Cross-reference: IT_TELEKOMMUNIKATION from WEEE → run AI (skip if noAi=true)
   let aiResult = null;
   if (!ruleResult && !noAi) {
-    aiResult = await classifyLevy(product.productName, product.category, product.subcategory);
+    const examples = await fetchCorrectionExamples("levy", product.category);
+    aiResult = await classifyLevy(product.productName, product.category, product.subcategory, examples);
   }
 
   const levyApplicable = ruleResult?.levyApplicable ?? aiResult?.levyApplicable ?? null;
