@@ -49,6 +49,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { href: "/compliance", label: "VerpackG-Meldung" },
     ],
   },
+  { href: "/settings", label: "Einstellungen" },
 ];
 
 function isGroup(entry: NavEntry): entry is NavGroup {

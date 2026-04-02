@@ -1,18 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { classifyLevy } from "@/lib/ai-classify";
 import { fetchCorrectionExamples } from "./corrections";
+import { getSettingGroup } from "@/lib/settings";
 
-// ZPÜ tariff rates (as of 2024, to be reviewed annually)
-export const LEVY_RATES: Record<string, number> = {
-  PRINTER_SCANNER_COPIER: 15.77,
-  USB_STICK:              0.39,
-  SSD_HDD:                1.10,
-  MEMORY_CARD:            0.10,
-  OPTICAL_MEDIA:          0.06,
-  TABLET_SMARTPHONE:      8.23,
-  PC_LAPTOP:              13.65,
-  NOT_APPLICABLE:         0,
-};
+/** Fetch ZPÜ rates from DB (with fallback to defaults). */
+async function getLevyRates(): Promise<Record<string, number>> {
+  const settings = await getSettingGroup("levy_rates");
+  const rates: Record<string, number> = { NOT_APPLICABLE: 0 };
+  for (const [key, value] of Object.entries(settings)) {
+    if (key.startsWith("levy_rate_")) {
+      rates[key.replace("levy_rate_", "")] = parseFloat(value) || 0;
+    }
+  }
+  return rates;
+}
 
 const CATEGORY_RULES: Array<[string, string]> = [
   ["drucker",    "PRINTER_SCANNER_COPIER"],
@@ -81,8 +82,9 @@ export async function estimateLevy(productId: string, noAi = false): Promise<voi
   const confidence = ruleResult?.confidence ?? (aiResult ? Math.min(0.70, aiResult.confidence) : 0);
   const method = ruleResult ? "category_rule" : aiResult ? "ai_classify" : "unknown";
 
+  const levyRates = await getLevyRates();
   const estimatedLevyEur =
-    levyCategory && levyCategory in LEVY_RATES ? LEVY_RATES[levyCategory] : null;
+    levyCategory && levyCategory in levyRates ? levyRates[levyCategory] : null;
   const annualLevyEur =
     estimatedLevyEur && product.annualUnitsSold
       ? estimatedLevyEur * product.annualUnitsSold

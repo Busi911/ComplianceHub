@@ -233,6 +233,19 @@ model ManufacturerDataBuffer {
   @@index([matchedProductId])
 }
 
+// Configurable system settings (ZPÜ tariffs, thresholds, etc.)
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  label       String
+  description String?
+  group       String   @default("general")
+  updatedAt   DateTime @updatedAt
+
+  @@index([group])
+}
+
 // Tracks manual user corrections to compliance classifications.
 // Used for audit trail and as few-shot learning examples for AI.
 model ComplianceCorrection {
