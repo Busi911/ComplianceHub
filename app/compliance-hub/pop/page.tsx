@@ -20,21 +20,24 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function PopPage() {
-  const [data, setData] = useState<{ profiles: PopProfile[]; total: number } | null>(null);
+  const [data, setData] = useState<{ profiles: PopProfile[]; total: number; page: number; pageCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [classifying, setClassifying] = useState(false); // POP uses rules only
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
 
   const load = useCallback(() => {
     setLoading(true);
     const p = new URLSearchParams();
     if (search) p.set("search", search);
     if (status) p.set("status", status);
+    p.set("page", String(page));
     fetch(`/api/compliance/pop?${p}`).then((r) => r.json()).then(setData).finally(() => setLoading(false));
-  }, [search, status]);
+  }, [search, status, page]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [search, status]);
 
   async function bulkClassify() {
     setClassifying(true);
@@ -105,6 +108,17 @@ export default function PopPage() {
               )}
             </tbody>
           </table>
+          {data && data.pageCount > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 text-sm text-gray-600">
+              <span>{data.total} Einträge · Seite {data.page} von {data.pageCount}</span>
+              <div className="flex gap-2">
+                <button onClick={() => setPage((p) => p - 1)} disabled={page <= 1}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40">← Zurück</button>
+                <button onClick={() => setPage((p) => p + 1)} disabled={page >= (data.pageCount ?? 1)}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40">Weiter →</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

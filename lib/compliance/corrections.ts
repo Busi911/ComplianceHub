@@ -15,15 +15,19 @@ export async function logCorrection(
   productCategory?: string,
 ): Promise<void> {
   if (Object.keys(correctedFields).length === 0) return;
-  await prisma.complianceCorrection.create({
-    data: {
-      productId,
-      module,
-      correctedFields: JSON.stringify(correctedFields),
-      productName: productName ?? null,
-      productCategory: productCategory ?? null,
-    },
-  });
+  try {
+    await prisma.complianceCorrection.create({
+      data: {
+        productId,
+        module,
+        correctedFields: JSON.stringify(correctedFields),
+        productName: productName ?? null,
+        productCategory: productCategory ?? null,
+      },
+    });
+  } catch {
+    // Non-critical — don't block the main operation if table doesn't exist yet
+  }
 }
 
 /**

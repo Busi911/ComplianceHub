@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
+  if (search) where.product = { OR: [{ productName: { contains: search, mode: "insensitive" } }, { ean: { contains: search } }] };
 
   const [profiles, total] = await Promise.all([
     prisma.productWeeeProfile.findMany({
@@ -29,11 +30,7 @@ export async function GET(request: NextRequest) {
     prisma.productWeeeProfile.count({ where }),
   ]);
 
-  const filtered = search
-    ? profiles.filter((p) => p.product.productName.toLowerCase().includes(search.toLowerCase()) || p.product.ean.includes(search))
-    : profiles;
-
-  return NextResponse.json({ profiles: filtered, total, page, pageCount: Math.ceil(total / limit) });
+  return NextResponse.json({ profiles, total, page, pageCount: Math.ceil(total / limit) });
 }
 
 export async function POST(request: NextRequest) {

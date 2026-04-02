@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import Link from "next/link";
 
 interface BatteryProfile {
@@ -39,11 +39,12 @@ interface EditState {
 }
 
 export default function BatteryPage() {
-  const [data, setData] = useState<{ profiles: BatteryProfile[]; total: number } | null>(null);
+  const [data, setData] = useState<{ profiles: BatteryProfile[]; total: number; page: number; pageCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [classifying, setClassifying] = useState<"" | "rules" | "ai">("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<EditState | null>(null);
 
   const load = useCallback(() => {
@@ -51,11 +52,14 @@ export default function BatteryPage() {
     const p = new URLSearchParams();
     if (search) p.set("search", search);
     if (status) p.set("status", status);
+    p.set("page", String(page));
     fetch(`/api/compliance/battery?${p}`)
       .then((r) => r.json())
       .then(setData)
       .finally(() => setLoading(false));
-  }, [search, status]);
+  }, [search, status, page]);
+
+  useEffect(() => { setPage(1); }, [search, status]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -163,8 +167,8 @@ export default function BatteryPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {(data?.profiles ?? []).map((p) => (
-                <>
-                  <tr key={p.productId} className={`hover:bg-gray-50 ${editing?.productId === p.productId ? "bg-amber-50" : ""}`}>
+                <Fragment key={p.productId}>
+                  <tr className={`hover:bg-gray-50 ${editing?.productId === p.productId ? "bg-amber-50" : ""}`}>
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900 truncate max-w-xs">{p.product.productName}</p>
                       <p className="text-xs text-gray-400">{p.product.category ?? "—"}</p>
@@ -207,7 +211,7 @@ export default function BatteryPage() {
                     </td>
                   </tr>
                   {editing?.productId === p.productId && (
-                    <tr key={`edit-${p.productId}`} className="bg-amber-50 border-b border-amber-200">
+                    <tr className="bg-amber-50 border-b border-amber-200">
                       <td colSpan={6} className="px-4 py-3">
                         <div className="flex flex-wrap items-end gap-3">
                           <div>
@@ -256,7 +260,7 @@ export default function BatteryPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
               {(data?.profiles ?? []).length === 0 && (
                 <tr>
@@ -267,6 +271,17 @@ export default function BatteryPage() {
               )}
             </tbody>
           </table>
+          {data && data.pageCount > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 text-sm text-gray-600">
+              <span>{data.total} Einträge · Seite {data.page} von {data.pageCount}</span>
+              <div className="flex gap-2">
+                <button onClick={() => setPage((p) => p - 1)} disabled={page <= 1}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40">← Zurück</button>
+                <button onClick={() => setPage((p) => p + 1)} disabled={page >= (data.pageCount ?? 1)}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40">Weiter →</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

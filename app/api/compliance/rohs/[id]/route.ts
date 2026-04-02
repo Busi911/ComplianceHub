@@ -25,10 +25,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     include: { product: { select: { productName: true, category: true } } },
   });
 
+  const updateData = { ...body };
+  if (body.status === "DECLARED" || body.status === "VERIFIED") updateData.confidenceScore = 1.0;
   const profile = await prisma.productRohsProfile.upsert({
     where: { productId: id },
-    create: { productId: id, ...body },
-    update: body,
+    create: { productId: id, ...updateData },
+    update: updateData,
   });
   await computeComplianceScore(id);
 
