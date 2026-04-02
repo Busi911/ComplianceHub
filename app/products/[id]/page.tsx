@@ -722,10 +722,124 @@ export default function ProductDetailPage() {
         </div>
       )}
 
+      {/* Compliance section */}
+      <ComplianceSection productId={id as string} />
+
       {/* Footer info */}
       <div className="text-xs text-gray-400 text-right">
         {product.importBatch && <>Importiert via „{product.importBatch.name}" am {fmtDate(product.importBatch.importedAt)} • </>}
         Erstellt: {fmtDate(product.createdAt)} • Aktualisiert: {fmtDate(product.updatedAt)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Compliance Section ───────────────────────────────────────────────────────
+
+interface ComplianceProfiles {
+  batteryProfile: { status: string } | null;
+  weeeProfile:    { status: string } | null;
+  levyProfile:    { status: string } | null;
+  reachProfile:   { status: string } | null;
+  rohsProfile:    { status: string } | null;
+  eudrProfile:    { status: string } | null;
+  popProfile:     { status: string } | null;
+}
+
+interface ComplianceScoreData {
+  overallScore: number;
+  applicableCount: number;
+  completedCount: number;
+}
+
+const COMPLIANCE_MODULES = [
+  { key: "batteryProfile", label: "BattDG",       href: "/compliance-hub/battery" },
+  { key: "weeeProfile",    label: "ElektroG",      href: "/compliance-hub/weee" },
+  { key: "levyProfile",    label: "Abgaben §54",   href: "/compliance-hub/levy" },
+  { key: "reachProfile",   label: "REACH",         href: "/compliance-hub/reach" },
+  { key: "rohsProfile",    label: "RoHS",          href: "/compliance-hub/rohs" },
+  { key: "eudrProfile",    label: "EUDR",          href: "/compliance-hub/eudr" },
+  { key: "popProfile",     label: "POP",           href: "/compliance-hub/pop" },
+] as const;
+
+const STATUS_CHIP_COLORS: Record<string, string> = {
+  VERIFIED:       "bg-green-100 text-green-800",
+  DECLARED:       "bg-blue-100 text-blue-800",
+  ESTIMATED:      "bg-yellow-100 text-yellow-800",
+  UNKNOWN:        "bg-gray-100 text-gray-500",
+  NOT_APPLICABLE: "bg-slate-100 text-slate-400",
+};
+
+function ComplianceSection({ productId }: { productId: string }) {
+  const [profiles, setProfiles] = useState<ComplianceProfiles | null>(null);
+  const [score, setScore] = useState<ComplianceScoreData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [classifying, setClassifying] = useState(false);
+
+  function load() {
+    setLoading(true);
+    fetch(`/api/compliance/score?productId=${productId}`)
+      .then((r) => r.json())
+      .then((d) => { setProfiles(d.profiles); setScore(d.score); })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => { load(); }, [productId]);
+
+  async function runClassify() {
+    setClassifying(true);
+    try {
+      await Promise.all(
+        COMPLIANCE_MODULES.map(({ href }) =>
+          fetch(`/api${href}/${productId}`, { method: "POST" })
+        )
+      );
+      load();
+    } finally {
+      setClassifying(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="font-semibold text-gray-900">Compliance-Module</h2>
+          {score && (
+            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">
+              Score: {Math.round(score.overallScore * 100)}% ({score.completedCount}/{score.applicableCount})
+            </span>
+          )}
+        </div>
+        <button
+          onClick={runClassify}
+          disabled={classifying || loading}
+          className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {classifying ? "Klassifiziere…" : "KI-Klassifizieren"}
+        </button>
+      </div>
+      <div className="px-5 py-4">
+        {loading ? (
+          <p className="text-xs text-gray-400">Lade…</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {COMPLIANCE_MODULES.map(({ key, label, href }) => {
+              const mod = profiles?.[key];
+              const status = mod?.status ?? "UNKNOWN";
+              return (
+                <Link
+                  key={key}
+                  href={`${href}?search=${productId}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${STATUS_CHIP_COLORS[status]} hover:opacity-80`}
+                >
+                  {label}
+                  <span className="font-normal opacity-70">{status.replace("_", " ")}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

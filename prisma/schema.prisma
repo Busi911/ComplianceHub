@@ -47,6 +47,14 @@ model Product {
   auditLogs        AuditLog[]               @relation("ProductAuditLogs")
   manufacturerRequestItems ManufacturerRequestItem[]
   manufacturerBufferMatches ManufacturerDataBuffer[]
+  complianceScore  ProductComplianceScore?
+  batteryProfile   ProductBatteryProfile?
+  weeeProfile      ProductWeeeProfile?
+  levyProfile      ProductLevyProfile?
+  reachProfile     ProductReachProfile?
+  rohsProfile      ProductRohsProfile?
+  eudrProfile      ProductEudrProfile?
+  popProfile       ProductPopProfile?
 
   @@index([category])
   @@index([brand])
@@ -238,4 +246,215 @@ enum PackagingStatus {
   ESTIMATED
   SAMPLED
   REVIEWED
+}
+
+// ─── Compliance Hub ──────────────────────────────────────────────────────────
+
+enum ComplianceStatus {
+  NOT_APPLICABLE
+  UNKNOWN
+  ESTIMATED
+  DECLARED
+  VERIFIED
+}
+
+model ProductComplianceScore {
+  id               String   @id @default(cuid())
+  productId        String   @unique
+  overallScore     Float    @default(0)
+  battScore        Float?
+  weeeScore        Float?
+  levyScore        Float?
+  reachScore       Float?
+  rohsScore        Float?
+  eudrScore        Float?
+  popScore         Float?
+  applicableCount  Int      @default(0)
+  completedCount   Int      @default(0)
+  lastComputedAt   DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+enum BatteryType {
+  LI_ION
+  NIMH
+  ALKALINE
+  NICD
+  LEAD_ACID
+  OTHER
+}
+
+model ProductBatteryProfile {
+  id                  String           @id @default(cuid())
+  productId           String           @unique
+  status              ComplianceStatus @default(UNKNOWN)
+  containsBattery     Boolean?
+  batteryType         BatteryType?
+  batteryWeightG      Float?
+  batteryCapacityMah  Float?
+  batteryCapacityWh   Float?
+  isRemovable         Boolean?
+  earRegistrationNr   String?
+  annualBatteryTonnes Float?
+  confidenceScore     Float?
+  estimationMethod    String?
+  aiClassifiedAt      DateTime?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  product             Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+enum WeeeCategory {
+  HAUSHALTSGROSSE_GERATE
+  HAUSHALTSKLEINGERATE
+  IT_TELEKOMMUNIKATION
+  UNTERHALTUNGSELEKTRONIK
+  BELEUCHTUNG
+  WERKZEUGE
+  SPIELZEUG_FREIZEIT_SPORT
+  MEDIZINPRODUKTE
+  UEBERWACHUNGS_INSTRUMENTE
+  AUTOMATEN
+}
+
+model ProductWeeeProfile {
+  id               String           @id @default(cuid())
+  productId        String           @unique
+  status           ComplianceStatus @default(UNKNOWN)
+  isElectronic     Boolean?
+  weeeCategory     WeeeCategory?
+  earWeeeRegNr     String?
+  deviceWeightG    Float?
+  annualWeeeKg     Float?
+  confidenceScore  Float?
+  estimationMethod String?
+  aiClassifiedAt   DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+enum LevyCategory {
+  PRINTER_SCANNER_COPIER
+  USB_STICK
+  SSD_HDD
+  MEMORY_CARD
+  OPTICAL_MEDIA
+  TABLET_SMARTPHONE
+  PC_LAPTOP
+  NOT_APPLICABLE
+}
+
+model ProductLevyProfile {
+  id               String           @id @default(cuid())
+  productId        String           @unique
+  status           ComplianceStatus @default(UNKNOWN)
+  levyCategory     LevyCategory?
+  levyApplicable   Boolean?
+  estimatedLevyEur Float?
+  annualLevyEur    Float?
+  zpuCategory      String?
+  confidenceScore  Float?
+  estimationMethod String?
+  aiClassifiedAt   DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+enum ReachDeclarationStatus {
+  NOT_CHECKED
+  CHECKED_COMPLIANT
+  DECLARATION_SENT
+  NON_COMPLIANT
+}
+
+model ProductReachProfile {
+  id                      String                 @id @default(cuid())
+  productId               String                 @unique
+  status                  ComplianceStatus       @default(UNKNOWN)
+  containsSvhc            Boolean?
+  aboveThreshold          Boolean?
+  svhcSubstancesJson      String?
+  declarationStatus       ReachDeclarationStatus?
+  supplierDeclarationRecv Boolean?
+  supplierDeclarationDate DateTime?
+  confidenceScore         Float?
+  estimationMethod        String?
+  aiClassifiedAt          DateTime?
+  notes                   String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  product                 Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+enum RohsStatus {
+  COMPLIANT
+  NON_COMPLIANT
+  EXEMPTION
+  NOT_CHECKED
+}
+
+model ProductRohsProfile {
+  id               String           @id @default(cuid())
+  productId        String           @unique
+  status           ComplianceStatus @default(UNKNOWN)
+  rohsApplicable   Boolean?
+  rohsStatus       RohsStatus?
+  ceMarkingPresent Boolean?
+  docAvailable     Boolean?
+  exemptionNumber  String?
+  confidenceScore  Float?
+  estimationMethod String?
+  aiClassifiedAt   DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ProductEudrProfile {
+  id                         String           @id @default(cuid())
+  productId                  String           @unique
+  status                     ComplianceStatus @default(UNKNOWN)
+  containsRegulatedCommodity Boolean?
+  commoditiesJson            String?
+  countryOfOrigin            String?
+  dueDiligenceRequired       Boolean?
+  hasGeolocationData         Boolean?
+  confidenceScore            Float?
+  estimationMethod           String?
+  aiClassifiedAt             DateTime?
+  notes                      String?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+
+  product                    Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ProductPopProfile {
+  id               String           @id @default(cuid())
+  productId        String           @unique
+  status           ComplianceStatus @default(UNKNOWN)
+  containsPops     Boolean?
+  substancesJson   String?
+  isCompliant      Boolean?
+  confidenceScore  Float?
+  estimationMethod String?
+  aiClassifiedAt   DateTime?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
