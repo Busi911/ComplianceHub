@@ -113,24 +113,33 @@ export async function getSettingGroup(
 /** Persist a setting value to DB. */
 export async function setSetting(key: string, value: string): Promise<void> {
   const meta = SETTING_DEFAULTS[key];
-  await prisma.systemSetting.upsert({
-    where: { key },
-    create: {
-      key, value,
-      label: meta?.label ?? key,
-      description: meta?.description ?? null,
-      group: meta?.group ?? "general",
-    },
-    update: { value },
-  });
+  try {
+    await prisma.systemSetting.upsert({
+      where: { key },
+      create: {
+        key, value,
+        label: meta?.label ?? key,
+        description: meta?.description ?? null,
+        group: meta?.group ?? "general",
+      },
+      update: { value },
+    });
+  } catch {
+    // DB unavailable — silently ignore
+  }
 }
 
 /** Return all settings with current DB values merged over defaults. */
 export async function getAllSettings(): Promise<
   Array<SettingMeta & { key: string; currentValue: string }>
 > {
-  const dbRows = await prisma.systemSetting.findMany();
-  const dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
+  let dbMap: Record<string, string> = {};
+  try {
+    const dbRows = await prisma.systemSetting.findMany();
+    dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
+  } catch {
+    // DB unavailable or table missing — fall back to defaults only
+  }
 
   return Object.entries(SETTING_DEFAULTS).map(([key, meta]) => ({
     key,
