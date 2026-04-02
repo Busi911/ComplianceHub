@@ -22,7 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function PopPage() {
   const [data, setData] = useState<{ profiles: PopProfile[]; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [classifying, setClassifying] = useState(false);
+  const [classifying, setClassifying] = useState(false); // POP uses rules only
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
 

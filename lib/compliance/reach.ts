@@ -16,7 +16,7 @@ function assessRiskFromCategory(name: string, category: string | null): "low" | 
   return "low";
 }
 
-export async function estimateReach(productId: string): Promise<void> {
+export async function estimateReach(productId: string, noAi = false): Promise<void> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -34,7 +34,7 @@ export async function estimateReach(productId: string): Promise<void> {
   const ruleRisk = assessRiskFromCategory(product.productName, product.category);
 
   let aiResult = null;
-  if (ruleRisk !== "low") {
+  if (ruleRisk !== "low" && !noAi) {
     aiResult = await classifyReach(product.productName, product.category, product.subcategory);
   }
 

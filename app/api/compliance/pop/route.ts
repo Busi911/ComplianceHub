@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ profiles: filtered, total, page, pageCount: Math.ceil(total / limit) });
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  void request; // POP has no AI, noAi param ignored
   const products = await prisma.product.findMany({
     where: { OR: [{ popProfile: { status: "UNKNOWN" } }, { popProfile: null }] },
     select: { id: true },

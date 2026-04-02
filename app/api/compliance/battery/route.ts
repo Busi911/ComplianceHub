@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // Bulk AI classify UNKNOWN profiles
+  const noAi = new URL(request.url).searchParams.get("noAi") === "true";
   const LIMIT = 50;
   const products = await prisma.product.findMany({
     where: {
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
   for (const { id } of products) {
     try {
-      await estimateBattery(id);
+      await estimateBattery(id, noAi);
       await computeComplianceScore(id);
       updated++;
     } catch {
@@ -75,5 +75,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ updated, errors, total: products.length });
+  return NextResponse.json({ updated, errors, total: products.length, noAi });
 }

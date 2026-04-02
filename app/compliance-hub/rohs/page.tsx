@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function RohsPage() {
   const [data, setData] = useState<{ profiles: RohsProfile[]; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [classifying, setClassifying] = useState(false);
+  const [classifying, setClassifying] = useState<"" | "rules" | "ai">("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
 
@@ -37,10 +37,10 @@ export default function RohsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function bulkClassify() {
-    setClassifying(true);
-    await fetch("/api/compliance/rohs", { method: "POST" });
-    setClassifying(false);
+  async function bulkClassify(noAi: boolean) {
+    setClassifying(noAi ? "rules" : "ai");
+    await fetch(`/api/compliance/rohs${noAi ? "?noAi=true" : ""}`, { method: "POST" });
+    setClassifying("");
     load();
   }
 
@@ -51,10 +51,18 @@ export default function RohsPage() {
           <h1 className="text-xl font-bold text-gray-900">RoHS — Gefährliche Stoffe</h1>
           <p className="text-sm text-gray-500">Restriction of Hazardous Substances — {data?.total ?? 0} Profile</p>
         </div>
-        <button onClick={bulkClassify} disabled={classifying}
-          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-          {classifying ? "Klassifiziere…" : "KI-Bulk-Klassifizierung"}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => bulkClassify(true)} disabled={classifying !== ""}
+            title="Nur Regelwerk — keine KI, kostenlos"
+            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 disabled:opacity-50">
+            {classifying === "rules" ? "Läuft…" : "Regelwerk (kostenlos)"}
+          </button>
+          <button onClick={() => bulkClassify(false)} disabled={classifying !== ""}
+            title="Regelwerk + KI für unbekannte Produkte"
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+            {classifying === "ai" ? "Klassifiziere…" : "Regelwerk + KI"}
+          </button>
+        </div>
       </div>
       <div className="flex gap-3">
         <input type="text" placeholder="Suche Produkt / EAN…" value={search} onChange={(e) => setSearch(e.target.value)}

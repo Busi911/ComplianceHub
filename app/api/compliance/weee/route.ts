@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ profiles: filtered, total, page, pageCount: Math.ceil(total / limit) });
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const noAi = new URL(request.url).searchParams.get("noAi") === "true";
   const products = await prisma.product.findMany({
     where: { OR: [{ weeeProfile: { status: "UNKNOWN" } }, { weeeProfile: null }] },
     select: { id: true },
@@ -45,7 +46,7 @@ export async function POST() {
 
   let updated = 0, errors = 0;
   for (const { id } of products) {
-    try { await estimateWeee(id); await computeComplianceScore(id); updated++; } catch { errors++; }
+    try { await estimateWeee(id, noAi); await computeComplianceScore(id); updated++; } catch { errors++; }
   }
-  return NextResponse.json({ updated, errors, total: products.length });
+  return NextResponse.json({ updated, errors, total: products.length, noAi });
 }

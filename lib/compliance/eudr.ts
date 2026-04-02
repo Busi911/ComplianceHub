@@ -38,7 +38,7 @@ function applyRule(name: string, category: string | null) {
   return found;
 }
 
-export async function estimateEudr(productId: string): Promise<void> {
+export async function estimateEudr(productId: string, noAi = false): Promise<void> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -60,7 +60,7 @@ export async function estimateEudr(productId: string): Promise<void> {
   let confidence = ruleCommodities.length > 0 ? 0.55 : 0.20;
   let method = ruleCommodities.length > 0 ? "category_rule" : "none";
 
-  if (ruleCommodities.length === 0) {
+  if (ruleCommodities.length === 0 && !noAi) {
     aiResult = await classifyEudr(product.productName, product.category, product.subcategory);
     if (aiResult) {
       commodities = aiResult.commodities;

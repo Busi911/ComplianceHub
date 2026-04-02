@@ -48,7 +48,7 @@ function applyRule(name: string, category: string | null, subcategory: string | 
   return null;
 }
 
-export async function estimateWeee(productId: string): Promise<void> {
+export async function estimateWeee(productId: string, noAi = false): Promise<void> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -73,9 +73,9 @@ export async function estimateWeee(productId: string): Promise<void> {
     ruleResult = { isElectronic: true, weeeCategory: "HAUSHALTSKLEINGERATE", confidence: 0.40 };
   }
 
-  // 2. AI classification
+  // 2. AI classification (skip if noAi=true)
   let aiResult = null;
-  if (!ruleResult) {
+  if (!ruleResult && !noAi) {
     aiResult = await classifyWeee(product.productName, product.category, product.subcategory);
   }
 

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { classifyRohs } from "@/lib/ai-classify";
 
-export async function estimateRohs(productId: string): Promise<void> {
+export async function estimateRohs(productId: string, noAi = false): Promise<void> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -65,8 +65,8 @@ export async function estimateRohs(productId: string): Promise<void> {
       return;
     }
 
-    // AI classification for electronic products
-    const aiResult = await classifyRohs(product.productName, product.category, product.subcategory, true);
+    // AI classification for electronic products (skip if noAi=true)
+    const aiResult = noAi ? null : await classifyRohs(product.productName, product.category, product.subcategory, true);
     const confidence = aiResult ? Math.min(0.65, aiResult.confidence) : 0.50;
 
     await prisma.productRohsProfile.upsert({
@@ -90,8 +90,8 @@ export async function estimateRohs(productId: string): Promise<void> {
     return;
   }
 
-  // isElectronic is null — use AI
-  const aiResult = await classifyRohs(product.productName, product.category, product.subcategory, null);
+  // isElectronic is null — use AI (skip if noAi=true)
+  const aiResult = noAi ? null : await classifyRohs(product.productName, product.category, product.subcategory, null);
   if (!aiResult) {
     await prisma.productRohsProfile.upsert({
       where: { productId },

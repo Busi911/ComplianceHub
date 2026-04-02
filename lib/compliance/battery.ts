@@ -33,7 +33,7 @@ function applyRule(name: string, category: string | null, subcategory: string | 
   return null;
 }
 
-export async function estimateBattery(productId: string): Promise<void> {
+export async function estimateBattery(productId: string, noAi = false): Promise<void> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: {
@@ -52,9 +52,9 @@ export async function estimateBattery(productId: string): Promise<void> {
   // 1. Category rules
   const ruleResult = applyRule(product.productName, product.category, product.subcategory);
 
-  // 2. AI classification
+  // 2. AI classification (skip if noAi=true)
   let aiResult = null;
-  if (!ruleResult) {
+  if (!ruleResult && !noAi) {
     aiResult = await classifyBattery(product.productName, product.category, product.subcategory);
   }
 
