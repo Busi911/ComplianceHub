@@ -27,14 +27,29 @@ const NAV_ENTRIES: NavEntry[] = [
     ],
   },
   {
+    label: "Compliance",
+    items: [
+      { href: "/compliance-hub", label: "Übersicht", exact: true },
+      { href: "/compliance-hub/battery", label: "BattDG" },
+      { href: "/compliance-hub/weee", label: "ElektroG/WEEE" },
+      { href: "/compliance-hub/levy", label: "Abgaben §54 UrhG" },
+      { href: "/compliance-hub/reach", label: "REACH" },
+      { href: "/compliance-hub/rohs", label: "RoHS" },
+      { href: "/compliance-hub/eudr", label: "EUDR" },
+      { href: "/compliance-hub/pop", label: "POP" },
+      { href: "/compliance-hub/corrections", label: "Korrekturen & Lernen" },
+    ],
+  },
+  {
     label: "Schätzungen",
     items: [
       { href: "/sampling", label: "Stichproben", exact: true },
       { href: "/sampling/session", label: "Wiegesession" },
       { href: "/estimation-rules", label: "Schätzlogik" },
-      { href: "/compliance", label: "Compliance" },
+      { href: "/compliance", label: "VerpackG-Meldung" },
     ],
   },
+  { href: "/settings", label: "Einstellungen" },
 ];
 
 function isGroup(entry: NavEntry): entry is NavGroup {
@@ -159,7 +174,7 @@ export function NavBar() {
           </div>
 
           <div className="hidden md:block text-xs text-gray-400">
-            Verpackungsdaten-System
+            ComplianceHub
           </div>
 
           {/* Mobile hamburger */}
