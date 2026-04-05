@@ -1,7 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { CategoryCorrelation } from "@/app/api/stats/correlations/route";
+
+interface TrackingHistory {
+  id: string;
+  productId: string;
+  productName: string;
+  category: string | null;
+  oldPlasticG: number | null;
+  newPlasticG: number | null;
+  oldPaperG: number | null;
+  newPaperG: number | null;
+  method: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+interface CategoryRow {
+  category: string;
+  total: number;
+  noProfile: number;
+  imported: number;
+  estimated: number;
+  sampled: number;
+  reviewed: number;
+  methods: { method: string; count: number }[];
+}
+
+interface TrackingData {
+  recentHistory: TrackingHistory[];
+  categories: CategoryRow[];
+}
 
 function rColor(r: number | null): string {
   if (r === null) return "text-gray-300";
@@ -30,10 +61,42 @@ function CorrCell({ r }: { r: number | null }) {
   );
 }
 
+function methodBadge(method: string | null): JSX.Element {
+  if (!method) return <span className="text-gray-300">—</span>;
+  const colors: Record<string, string> = {
+    own_sampling: "bg-green-100 text-green-800",
+    manufacturer_data: "bg-green-50 text-green-700",
+    similar_products: "bg-yellow-100 text-yellow-800",
+    regression_gross_weight: "bg-blue-100 text-blue-800",
+    category_mfr_avg: "bg-teal-100 text-teal-800",
+    category_avg: "bg-orange-100 text-orange-800",
+  };
+  const key = Object.keys(colors).find((k) => method.startsWith(k));
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${key ? colors[key] : "bg-gray-100 text-gray-600"}`}>
+      {method}
+    </span>
+  );
+}
+
+function fmtG(v: number | null) {
+  return v != null ? `${v.toFixed(1)} g` : "—";
+}
+
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 export default function EstimationRulesPage() {
   const [stats, setStats] = useState<{ categories: CategoryCorrelation[]; computedAt: string } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [corrTab, setCorrTab] = useState<"plastic" | "paper">("plastic");
+
+  const [tracking, setTracking] = useState<TrackingData | null>(null);
+  const [trackingLoading, setTrackingLoading] = useState(true);
+  const [filterCategory, setFilterCategory] = useState<string>("");
+  const [trackTab, setTrackTab] = useState<"history" | "categories">("categories");
 
   useEffect(() => {
     fetch("/api/stats/correlations")
@@ -42,6 +105,17 @@ export default function EstimationRulesPage() {
       .finally(() => setStatsLoading(false));
   }, []);
 
+  useEffect(() => {
+    const url = filterCategory
+      ? `/api/stats/estimate-tracking?category=${encodeURIComponent(filterCategory)}`
+      : "/api/stats/estimate-tracking";
+    setTrackingLoading(true);
+    fetch(url)
+      .then((r) => r.json())
+      .then((d) => { if (!d.error) setTracking(d); })
+      .finally(() => setTrackingLoading(false));
+  }, [filterCategory]);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
       <div>
@@ -49,6 +123,146 @@ export default function EstimationRulesPage() {
         <p className="text-gray-500 mt-1 text-sm">
           Wie das System Verpackungsgewichte schätzt — inkl. Live-Statistiken
         </p>
+      </div>
+
+      {/* ── Tracking ──────────────────────────────────────────────────────────── */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+          <h2 className="font-semibold text-gray-900">Schätzungs-Tracking</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Category filter */}
+            <select
+              value={filterCategory}
+              onChange={(e: { target: { value: string } }) => setFilterCategory(e.target.value)}
+              className="text-sm border border-gray-300 rounded px-2 py-1.5 bg-white text-gray-700"
+            >
+              <option value="">Alle Kategorien</option>
+              {tracking?.categories.map((c: CategoryRow) => (
+                <option key={c.category} value={c.category === "(keine Kategorie)" ? "" : c.category}>
+                  {c.category}
+                </option>
+              ))}
+            </select>
+            {/* Tab toggle */}
+            <div className="flex rounded border border-gray-300 overflow-hidden text-xs">
+              <button
+                onClick={() => setTrackTab("categories")}
+                className={`px-3 py-1.5 transition-colors ${trackTab === "categories" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                Kategorien
+              </button>
+              <button
+                onClick={() => setTrackTab("history")}
+                className={`px-3 py-1.5 border-l border-gray-300 transition-colors ${trackTab === "history" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                Letzte Änderungen
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {trackingLoading && (
+          <div className="space-y-2 animate-pulse">
+            {[...Array(4)].map((_, i) => <div key={i} className="h-8 bg-gray-100 rounded" />)}
+          </div>
+        )}
+
+        {/* ── Tab: Kategorien ── */}
+        {!trackingLoading && trackTab === "categories" && tracking && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-left border-b border-gray-200 text-xs">
+                  <th className="px-3 py-2 font-medium text-gray-600">Kategorie</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 text-right">Gesamt</th>
+                  <th className="px-3 py-2 font-medium text-gray-400 text-right">Importiert</th>
+                  <th className="px-3 py-2 font-medium text-yellow-700 text-right">Geschätzt</th>
+                  <th className="px-3 py-2 font-medium text-green-700 text-right">Gemessen</th>
+                  <th className="px-3 py-2 font-medium text-blue-700 text-right">Geprüft</th>
+                  <th className="px-3 py-2 font-medium text-gray-400 text-right">Kein Profil</th>
+                  <th className="px-3 py-2 font-medium text-gray-600">Methoden</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {tracking.categories.map((cat: CategoryRow) => (
+                  <tr key={cat.category} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-800 text-xs">{cat.category}</td>
+                    <td className="px-3 py-2 text-right text-xs text-gray-600 font-mono">{cat.total}</td>
+                    <td className="px-3 py-2 text-right text-xs text-gray-400 font-mono">{cat.imported || "—"}</td>
+                    <td className="px-3 py-2 text-right text-xs font-mono">
+                      {cat.estimated > 0 ? <span className="text-yellow-700 font-medium">{cat.estimated}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs font-mono">
+                      {cat.sampled > 0 ? <span className="text-green-700 font-medium">{cat.sampled}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs font-mono">
+                      {cat.reviewed > 0 ? <span className="text-blue-700 font-medium">{cat.reviewed}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs font-mono">
+                      {cat.noProfile > 0 ? <span className="text-gray-400">{cat.noProfile}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {cat.methods.slice(0, 3).map((m: { method: string; count: number }) => (
+                          <span key={m.method} className="inline-flex items-center gap-1">
+                            {methodBadge(m.method)}
+                            <span className="text-gray-400 text-xs">×{m.count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {tracking.categories.length === 0 && (
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-400">Keine Daten</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Tab: Letzte Änderungen ── */}
+        {!trackingLoading && trackTab === "history" && tracking && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-left border-b border-gray-200 text-xs">
+                  <th className="px-3 py-2 font-medium text-gray-600">Produkt</th>
+                  <th className="px-3 py-2 font-medium text-gray-600">Kategorie</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 text-right">Plastik alt</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 text-right">Plastik neu</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Papier alt</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 text-right hidden md:table-cell">Papier neu</th>
+                  <th className="px-3 py-2 font-medium text-gray-600">Methode</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 hidden lg:table-cell">Grund</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 text-right">Datum</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {tracking.recentHistory.map((h: TrackingHistory) => (
+                  <tr key={h.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 text-xs max-w-[160px]">
+                      <Link href={`/products/${h.productId}`} className="text-blue-600 hover:underline truncate block">
+                        {h.productName}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-500">{h.category ?? "—"}</td>
+                    <td className="px-3 py-2 text-right text-xs font-mono text-gray-400">{fmtG(h.oldPlasticG)}</td>
+                    <td className="px-3 py-2 text-right text-xs font-mono font-medium text-gray-800">{fmtG(h.newPlasticG)}</td>
+                    <td className="px-3 py-2 text-right text-xs font-mono text-gray-400 hidden md:table-cell">{fmtG(h.oldPaperG)}</td>
+                    <td className="px-3 py-2 text-right text-xs font-mono font-medium text-gray-800 hidden md:table-cell">{fmtG(h.newPaperG)}</td>
+                    <td className="px-3 py-2">{methodBadge(h.method)}</td>
+                    <td className="px-3 py-2 text-xs text-gray-500 hidden lg:table-cell max-w-[180px] truncate">{h.reason ?? "—"}</td>
+                    <td className="px-3 py-2 text-right text-xs text-gray-400 whitespace-nowrap">{fmtDate(h.createdAt)}</td>
+                  </tr>
+                ))}
+                {tracking.recentHistory.length === 0 && (
+                  <tr><td colSpan={9} className="px-3 py-6 text-center text-sm text-gray-400">Noch keine Schätzungsänderungen vorhanden.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Priority overview */}
@@ -123,6 +337,22 @@ export default function EstimationRulesPage() {
                 <div className="text-gray-500">bestR2    = max(r²_plastik, r²_papier)</div>
                 <div className="text-gray-500">Konfidenz = round(0.20 + bestR2 × 0.50, 2)  — Deckel: 0.70</div>
                 <div className="text-gray-400 pl-4">r²=0.40 → 0.40 · r²=0.60 → 0.50 · r²=1.00 → 0.70</div>
+              </div>
+            </div>
+          </li>
+          <li className="flex gap-4">
+            <div className="flex-shrink-0 w-8 h-8 bg-teal-500 text-white rounded-full flex items-center justify-center font-bold text-sm" style={{fontSize:"10px"}}>3.5</div>
+            <div>
+              <div className="font-medium text-gray-900">Kategorie-Ø aus Hersteller-Angaben <span className="ml-2 px-2 py-0.5 rounded text-xs bg-teal-100 text-teal-800">category_mfr_avg_nX</span></div>
+              <p className="text-sm text-gray-600 mt-1">
+                Wenn andere Produkte in derselben Kategorie MFR-Werte haben (aber keine Stichproben), werden deren Herstellerangaben als Kategoriedurchschnitt genutzt.
+                Typischer Fall: 10 Ketchup-Produkte, 2 haben MFR-Werte → andere 8 nutzen deren Durchschnitt.
+                Greift nur wenn <strong>keine eigenen Stichproben und keine eigenen MFR-Werte</strong> vorhanden sind.
+              </p>
+              <div className="mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 space-y-0.5">
+                <div className="text-gray-700">Kunststoff = Mittelwert(mfrPlasticG aller Geschwister ohne Stichproben, max. 20)</div>
+                <div className="text-gray-700">Papier     = Mittelwert(mfrPaperG aller Geschwister ohne Stichproben, max. 20)</div>
+                <div className="text-gray-500 mt-1">Konfidenz  = 0.25 (fest)</div>
               </div>
             </div>
           </li>
@@ -260,7 +490,7 @@ export default function EstimationRulesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {stats.categories.map((cat) => (
+                    {stats.categories.map((cat: CategoryCorrelation) => (
                       <tr key={cat.category} className="hover:bg-gray-50">
                         <td className="px-3 py-2 font-medium text-gray-800 text-sm">{cat.category}</td>
                         <td className="px-3 py-2 text-right text-xs text-gray-500">{cat.n}</td>
@@ -313,7 +543,7 @@ export default function EstimationRulesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {stats.categories.map((cat) => (
+                    {stats.categories.map((cat: CategoryCorrelation) => (
                       <tr key={cat.category} className="hover:bg-gray-50">
                         <td className="px-3 py-2 font-medium text-gray-800 text-sm">{cat.category}</td>
                         <td className="px-3 py-2 text-right text-xs text-gray-500">{cat.n}</td>
