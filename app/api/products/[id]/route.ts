@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { estimatePackaging } from "@/lib/estimation";
+import { PackagingStatus } from "@prisma/client";
 
 export async function GET(
   _request: NextRequest,
@@ -101,8 +102,64 @@ export async function PUT(
       },
     });
 
-    // Re-run estimation after update
-    await estimatePackaging(id);
+    // Re-run estimation after update and persist the result
+    const estimateResult = await estimatePackaging(id);
+    if (estimateResult) {
+      const existingProfile = await prisma.productPackagingProfile.findUnique({
+        where: { productId: id },
+        select: { currentPlasticG: true, currentPaperG: true, status: true },
+      });
+
+      const isMeasured = estimateResult.method.startsWith("own_sampling");
+      const newStatus =
+        existingProfile?.status === PackagingStatus.SAMPLED && !isMeasured
+          ? PackagingStatus.SAMPLED
+          : isMeasured
+          ? PackagingStatus.SAMPLED
+          : PackagingStatus.ESTIMATED;
+
+      await prisma.productPackagingProfile.upsert({
+        where: { productId: id },
+        create: {
+          productId: id,
+          status: newStatus,
+          currentPlasticG: estimateResult.plasticG,
+          currentPaperG: estimateResult.paperG,
+          estimatedPlasticG: isMeasured ? undefined : estimateResult.plasticG,
+          estimatedPaperG: isMeasured ? undefined : estimateResult.paperG,
+          measuredPlasticG: isMeasured ? estimateResult.plasticG : undefined,
+          measuredPaperG: isMeasured ? estimateResult.paperG : undefined,
+          confidenceScore: estimateResult.confidenceScore,
+          estimationMethod: estimateResult.method,
+        },
+        update: {
+          status: newStatus,
+          currentPlasticG: estimateResult.plasticG,
+          currentPaperG: estimateResult.paperG,
+          ...(isMeasured
+            ? { measuredPlasticG: estimateResult.plasticG, measuredPaperG: estimateResult.paperG }
+            : { estimatedPlasticG: estimateResult.plasticG, estimatedPaperG: estimateResult.paperG }),
+          confidenceScore: estimateResult.confidenceScore,
+          estimationMethod: estimateResult.method,
+        },
+      });
+
+      const plasticChanged = existingProfile?.currentPlasticG !== estimateResult.plasticG;
+      const paperChanged = existingProfile?.currentPaperG !== estimateResult.paperG;
+      if (plasticChanged || paperChanged) {
+        await prisma.productEstimateHistory.create({
+          data: {
+            productId: id,
+            oldPlasticG: existingProfile?.currentPlasticG ?? null,
+            oldPaperG: existingProfile?.currentPaperG ?? null,
+            newPlasticG: estimateResult.plasticG,
+            newPaperG: estimateResult.paperG,
+            reason: "Produkt-Update (manuelle Änderung)",
+            method: estimateResult.method,
+          },
+        });
+      }
+    }
 
     return NextResponse.json(product);
   } catch (error) {

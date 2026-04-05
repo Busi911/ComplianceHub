@@ -115,20 +115,58 @@ export async function GET(request: NextRequest) {
     data: { type: "reestimate", startedAt: new Date() },
   });
 
-  const products = await prisma.product.findMany({
-    where: {
-      OR: [
-        { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
-        { packagingProfile: null },
-      ],
-    },
-    select: {
-      id: true,
-      samplingRecords: { select: { id: true }, take: 1 },
-    },
-    orderBy: { packagingProfile: { updatedAt: "asc" } },
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const eligibleWhere = {
+    OR: [
+      { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
+      { packagingProfile: null },
+    ],
+  } as const;
+  const selectFields = {
+    id: true,
+    samplingRecords: { select: { id: true }, take: 1 },
+  } as const;
+
+  // Phase 1: Products changed in the last 24 h — clean up what wasn't re-estimated yet
+  const phase1 = await prisma.product.findMany({
+    where: { updatedAt: { gte: yesterday }, ...eligibleWhere },
+    select: selectFields,
+    orderBy: { updatedAt: "desc" },
     take: LIMIT,
   });
+
+  const phase1Ids = phase1.map((p) => p.id);
+  const remaining = LIMIT - phase1.length;
+
+  // Phase 2a: Products with no profile at all (never estimated) — oldest first
+  const noProfile = remaining > 0
+    ? await prisma.product.findMany({
+        where: { id: { notIn: phase1Ids }, packagingProfile: null },
+        select: selectFields,
+        orderBy: { createdAt: "asc" },
+        take: remaining,
+      })
+    : [];
+
+  const noProfileIds = noProfile.map((p) => p.id);
+  const remaining2 = remaining - noProfile.length;
+
+  // Phase 2b: Fill rest with IMPORTED/ESTIMATED products — oldest estimate first
+  const backfill = remaining2 > 0
+    ? await prisma.product.findMany({
+        where: {
+          id: { notIn: [...phase1Ids, ...noProfileIds] },
+          packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } },
+        },
+        select: selectFields,
+        orderBy: { packagingProfile: { updatedAt: "asc" } },
+        take: remaining2,
+      })
+    : [];
+
+  const products = [...phase1, ...noProfile, ...backfill];
+  const phase1Count = phase1.length;
+  const phase2Count = noProfile.length + backfill.length;
 
   const total = products.length;
   let updated = 0;
@@ -227,8 +265,8 @@ export async function GET(request: NextRequest) {
   });
 
   console.log(
-    `[cron/reestimate] ${updated} updated, ${noChange} no-change, ${skipped} no-data, ${errors} errors / ${total} eligible — ${durationMs}ms`
+    `[cron/reestimate] phase1=${phase1Count} (recent changes) phase2=${phase2Count} (backfill) | ${updated} updated, ${noChange} no-change, ${skipped} no-data, ${errors} errors / ${total} eligible — ${durationMs}ms`
   );
 
-  return NextResponse.json({ cronRunId: cronRun.id, total, updated, noChange, skipped, errors, durationMs });
+  return NextResponse.json({ cronRunId: cronRun.id, total, updated, noChange, skipped, errors, durationMs, phase1Count, phase2Count });
 }
