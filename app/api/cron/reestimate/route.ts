@@ -116,12 +116,10 @@ export async function GET(request: NextRequest) {
   });
 
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const eligibleWhere = {
-    OR: [
-      { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
-      { packagingProfile: null },
-    ],
-  } as const;
+  const eligibleOr = [
+    { packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } } },
+    { packagingProfile: null },
+  ];
   const selectFields = {
     id: true,
     samplingRecords: { select: { id: true }, take: 1 },
@@ -129,7 +127,7 @@ export async function GET(request: NextRequest) {
 
   // Phase 1: Products changed in the last 24 h — clean up what wasn't re-estimated yet
   const phase1 = await prisma.product.findMany({
-    where: { updatedAt: { gte: yesterday }, ...eligibleWhere },
+    where: { updatedAt: { gte: yesterday }, OR: eligibleOr },
     select: selectFields,
     orderBy: { updatedAt: "desc" },
     take: LIMIT,
