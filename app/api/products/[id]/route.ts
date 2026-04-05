@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { estimatePackaging } from "@/lib/estimation";
+import { estimatePackaging, cascadeReestimateCategory } from "@/lib/estimation";
 import { PackagingStatus } from "@prisma/client";
 
 export async function GET(
@@ -159,6 +159,16 @@ export async function PUT(
           },
         });
       }
+    }
+
+    // If MFR packaging values changed, cascade to sibling products in the same category.
+    // This lets the other 8 Ketchup products benefit immediately from the 2 that now have MFR data.
+    const newMfrPlastic = parseOptFloat(mfrPlasticG);
+    const newMfrPaper = parseOptFloat(mfrPaperG);
+    const mfrChanged =
+      newMfrPlastic !== existing.mfrPlasticG || newMfrPaper !== existing.mfrPaperG;
+    if (mfrChanged && product.category) {
+      cascadeReestimateCategory(product.category, id).catch(console.error);
     }
 
     return NextResponse.json(product);

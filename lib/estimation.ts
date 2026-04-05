@@ -100,6 +100,39 @@ export async function estimatePackaging(
     if (regressionResult) return regressionResult;
   }
 
+  // ── Tier 3.5: Category average from other products' manufacturer data ─────
+  // Fills the gap when no sampling data exists but sibling products have MFR values.
+  // E.g. 10 Ketchup products — 2 have mfrPlasticG → other 8 can use their average.
+  if (product.category) {
+    const mfrProducts = await prisma.product.findMany({
+      where: {
+        category: product.category,
+        id: { not: productId },
+        samplingRecords: { none: {} },
+        OR: [{ mfrPlasticG: { not: null } }, { mfrPaperG: { not: null } }],
+      },
+      select: { id: true, mfrPlasticG: true, mfrPaperG: true },
+      take: 20,
+    });
+
+    if (mfrProducts.length > 0) {
+      const plasticValues = mfrProducts
+        .map((p) => p.mfrPlasticG)
+        .filter((v): v is number => v !== null);
+      const paperValues = mfrProducts
+        .map((p) => p.mfrPaperG)
+        .filter((v): v is number => v !== null);
+
+      return {
+        plasticG: plasticValues.length > 0 ? mean(plasticValues) : null,
+        paperG: paperValues.length > 0 ? mean(paperValues) : null,
+        confidenceScore: 0.25,
+        method: `category_mfr_avg_n${mfrProducts.length}`,
+        basedOnProductIds: mfrProducts.map((p) => p.id),
+      };
+    }
+  }
+
   // ── Tier 4: Category-level average ────────────────────────────────────────
   if (product.category) {
     const categoryProducts = await prisma.product.findMany({
@@ -480,12 +513,18 @@ export async function cascadeReestimateCategory(
   category: string,
   excludeProductId: string
 ): Promise<number> {
+  // Include IMPORTED and null-profile products, not just ESTIMATED.
+  // This covers cases where new MFR data makes previously un-estimable
+  // siblings (e.g. the other 8 Ketchup products) estimable for the first time.
   const toReestimate = await prisma.product.findMany({
     where: {
       category,
       id: { not: excludeProductId },
       samplingRecords: { none: {} },
-      packagingProfile: { status: PackagingStatus.ESTIMATED },
+      OR: [
+        { packagingProfile: { status: { in: [PackagingStatus.ESTIMATED, PackagingStatus.IMPORTED] } } },
+        { packagingProfile: null },
+      ],
     },
     include: { packagingProfile: true },
     take: 40,
@@ -498,22 +537,35 @@ export async function cascadeReestimateCategory(
     if (!result) continue;
 
     const old = p.packagingProfile;
-    if (!old) continue;
 
     const plasticShift =
-      old.currentPlasticG && result.plasticG
+      old?.currentPlasticG && result.plasticG
         ? Math.abs(old.currentPlasticG - result.plasticG) / old.currentPlasticG
-        : old.currentPlasticG !== result.plasticG
+        : old?.currentPlasticG !== result.plasticG
           ? 1
           : 0;
 
     const confidenceImproved =
-      (result.confidenceScore ?? 0) > (old.confidenceScore ?? 0) + 0.01;
+      (result.confidenceScore ?? 0) > (old?.confidenceScore ?? 0) + 0.01;
 
-    if (plasticShift > 0.02 || confidenceImproved) {
-      await prisma.productPackagingProfile.update({
+    // Always update if no prior estimate existed (old is null or no currentPlasticG)
+    const isNew = !old || old.currentPlasticG == null;
+
+    if (isNew || plasticShift > 0.02 || confidenceImproved) {
+      await prisma.productPackagingProfile.upsert({
         where: { productId: p.id },
-        data: {
+        create: {
+          productId: p.id,
+          status: PackagingStatus.ESTIMATED,
+          currentPlasticG: result.plasticG,
+          currentPaperG: result.paperG,
+          estimatedPlasticG: result.plasticG,
+          estimatedPaperG: result.paperG,
+          confidenceScore: result.confidenceScore,
+          estimationMethod: result.method,
+        },
+        update: {
+          status: PackagingStatus.ESTIMATED,
           currentPlasticG: result.plasticG,
           currentPaperG: result.paperG,
           estimatedPlasticG: result.plasticG,
