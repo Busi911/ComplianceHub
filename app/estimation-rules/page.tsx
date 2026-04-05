@@ -61,7 +61,7 @@ function CorrCell({ r }: { r: number | null }) {
   );
 }
 
-function methodBadge(method: string | null): JSX.Element {
+function methodBadge(method: string | null) {
   if (!method) return <span className="text-gray-300">—</span>;
   const colors: Record<string, string> = {
     own_sampling: "bg-green-100 text-green-800",
