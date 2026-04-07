@@ -28,14 +28,23 @@ const STATUS_CONFIG: Record<
   },
 };
 
+const MFR_DATA_CONFIG = {
+  label: "Gemeldet",
+  color: "bg-purple-100 text-purple-800 border-purple-200",
+  title: "Werte direkt vom Hersteller gemeldet",
+};
+
 interface StatusBadgeProps {
   status: string;
+  estimationMethod?: string | null;
   size?: "sm" | "md";
 }
 
-export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
+export function StatusBadge({ status, estimationMethod, size = "md" }: StatusBadgeProps) {
   const config =
-    STATUS_CONFIG[status as PackagingStatus] ?? STATUS_CONFIG.IMPORTED;
+    status === "ESTIMATED" && estimationMethod === "manufacturer_data"
+      ? MFR_DATA_CONFIG
+      : (STATUS_CONFIG[status as PackagingStatus] ?? STATUS_CONFIG.IMPORTED);
   const sizeClass = size === "sm" ? "px-1.5 py-0.5 text-xs" : "px-2 py-1 text-xs";
 
   return (

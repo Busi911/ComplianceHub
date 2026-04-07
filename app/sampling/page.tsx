@@ -415,7 +415,7 @@ function SamplingPriorityInner() {
                     {p.brand ?? p.manufacturer ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={p.packagingProfile?.status ?? "IMPORTED"} size="sm" />
+                    <StatusBadge status={p.packagingProfile?.status ?? "IMPORTED"} estimationMethod={p.packagingProfile?.estimationMethod} size="sm" />
                   </td>
                   <td className="px-4 py-3 min-w-[120px]">
                     <ConfidenceBar score={p.packagingProfile?.confidenceScore ?? null} showLabel={false} />
