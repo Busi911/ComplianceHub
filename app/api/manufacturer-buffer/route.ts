@@ -244,7 +244,10 @@ export async function POST(request: NextRequest) {
   let updated = 0;
   let autoMatched = 0;
 
-  for (const entry of entries) {
+  type EntryType = typeof entries[0];
+  type EntryResult = { created: number; updated: number; autoMatched: number };
+
+  async function processEntry(entry: EntryType): Promise<EntryResult> {
     // Produkt suchen: erst per EAN, dann per interner Artikelnummer
     let existingProduct: { id: string } | null = null;
     if (entry.ean) {
@@ -292,18 +295,31 @@ export async function POST(request: NextRequest) {
           data: { ...entry, matchedProductId: existingProduct.id, matchedAt: new Date() },
         });
       }
-      autoMatched++;
+      return { created: 0, updated: 0, autoMatched: 1 };
     } else {
       if (existingBuffer) {
         await prisma.manufacturerDataBuffer.update({
           where: { id: existingBuffer.id },
           data: entry,
         });
-        updated++;
+        return { created: 0, updated: 1, autoMatched: 0 };
       } else {
         await prisma.manufacturerDataBuffer.create({ data: entry });
-        created++;
+        return { created: 1, updated: 0, autoMatched: 0 };
       }
+    }
+  }
+
+  // Process in parallel batches of 50 to avoid sequential DB query bottleneck
+  // (sequential processing of 600+ rows easily exceeds the 60-second limit).
+  const BATCH_SIZE = 50;
+  for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
+    const batch = entries.slice(batchStart, batchStart + BATCH_SIZE);
+    const results = await Promise.all(batch.map(processEntry));
+    for (const r of results) {
+      created += r.created;
+      updated += r.updated;
+      autoMatched += r.autoMatched;
     }
   }
 
