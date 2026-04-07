@@ -79,6 +79,7 @@ interface Product {
 
 function fmt(val: number | null, decimals = 1, unit = "g"): string {
   if (val === null) return "—";
+  if (unit === "g" && val >= 1000) return `${parseFloat((val / 1000).toFixed(3))} kg`;
   return `${val.toFixed(decimals)} ${unit}`;
 }
 

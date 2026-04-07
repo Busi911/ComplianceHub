@@ -4,6 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 
+function useRole() {
+  const [role, setRole] = useState<"admin" | "readonly" | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role ?? null))
+      .catch(() => {});
+  }, []);
+  return role;
+}
+
 type NavLink = { href: string; label: string; exact?: boolean };
 type NavGroup = { label: string; items: NavLink[] };
 type NavEntry = NavLink | NavGroup;
@@ -131,6 +142,7 @@ function DropdownMenu({
 
 export function NavBar() {
   const pathname = usePathname();
+  const role = useRole();
   const [menuOpen, setMenuOpen] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const isActive = useIsActive(pathname);
@@ -139,6 +151,11 @@ export function NavBar() {
     setMenuOpen(false);
     setExpandedGroup(null);
   }, [pathname]);
+
+  // For read-only users the Compliance module is hidden (write-protected server-side anyway)
+  const visibleEntries = role === "readonly"
+    ? NAV_ENTRIES.filter((e) => !("label" in e && e.label === "Compliance"))
+    : NAV_ENTRIES;
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -151,7 +168,7 @@ export function NavBar() {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-1">
-            {NAV_ENTRIES.map((entry) => {
+            {visibleEntries.map((entry) => {
               if (isGroup(entry)) {
                 return (
                   <DropdownMenu key={entry.label} group={entry} pathname={pathname} />
@@ -173,7 +190,12 @@ export function NavBar() {
             })}
           </div>
 
-          <div className="hidden md:block text-xs text-gray-400">
+          <div className="hidden md:flex items-center gap-2 text-xs text-gray-400">
+            {role === "readonly" && (
+              <span className="bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
+                Lesezugriff
+              </span>
+            )}
             ComplianceHub
           </div>
 
@@ -200,7 +222,12 @@ export function NavBar() {
       {menuOpen && (
         <div className="md:hidden border-t border-gray-100 bg-white shadow-lg">
           <div className="px-4 py-2 space-y-1">
-            {NAV_ENTRIES.map((entry) => {
+            {role === "readonly" && (
+              <div className="px-3 py-2 text-xs text-amber-700 font-medium">
+                Lesezugriff – keine Änderungen möglich
+              </div>
+            )}
+            {visibleEntries.map((entry) => {
               if (isGroup(entry)) {
                 const groupActive = entry.items.some((item) =>
                   isActive(item.href, item.exact)

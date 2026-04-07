@@ -15,6 +15,8 @@ const WRITE_PROTECTED_PREFIXES = [
   "/api/brands",
   "/api/tools",
   "/api/manufacturer-buffer",
+  "/api/compliance",
+  "/api/settings",
 ];
 
 export function middleware(request: NextRequest) {
