@@ -63,6 +63,7 @@ export default function SamplingSessionPage() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(false);
   const [loadingPresetId, setLoadingPresetId] = useState<string | null>(null);
+  const [deletingPresetId, setDeletingPresetId] = useState<string | null>(null);
 
   // Session state
   const [rows, setRows] = useState<SessionRow[]>([]);
@@ -288,6 +289,16 @@ export default function SamplingSessionPage() {
       setAddTab("search");
     } finally {
       setLoadingPresetId(null);
+    }
+  }
+
+  async function deletePreset(presetId: string) {
+    setDeletingPresetId(presetId);
+    try {
+      await fetch(`/api/sampling/presets/${presetId}`, { method: "DELETE" });
+      setPresets((prev) => prev.filter((p) => p.id !== presetId));
+    } finally {
+      setDeletingPresetId(null);
     }
   }
 
@@ -652,7 +663,7 @@ export default function SamplingSessionPage() {
                     const ids: string[] = JSON.parse(preset.productIds);
                     return (
                       <div key={preset.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2.5 hover:bg-gray-50">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="font-medium text-sm text-gray-900">{preset.name}</div>
                           {preset.description && (
                             <div className="text-xs text-gray-500">{preset.description}</div>
@@ -662,13 +673,23 @@ export default function SamplingSessionPage() {
                             {new Date(preset.updatedAt).toLocaleDateString("de-DE")}
                           </div>
                         </div>
-                        <button
-                          onClick={() => loadPreset(preset.id)}
-                          disabled={loadingPresetId === preset.id}
-                          className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 disabled:opacity-50 flex-shrink-0"
-                        >
-                          {loadingPresetId === preset.id ? "Lädt…" : "Laden"}
-                        </button>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => loadPreset(preset.id)}
+                            disabled={loadingPresetId === preset.id}
+                            className="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 disabled:opacity-50"
+                          >
+                            {loadingPresetId === preset.id ? "Lädt…" : "Laden"}
+                          </button>
+                          <button
+                            onClick={() => deletePreset(preset.id)}
+                            disabled={deletingPresetId === preset.id}
+                            title="Vorlage löschen"
+                            className="text-xs text-gray-400 hover:text-red-500 px-1.5 py-1.5 rounded hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {deletingPresetId === preset.id ? "…" : "✕"}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
