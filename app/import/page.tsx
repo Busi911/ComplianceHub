@@ -146,8 +146,33 @@ export default function ImportPage() {
         }
       }
 
-      // ── Split into header + data lines ────────────────────────────────────────
-      const allLines = text.split(/\r?\n/);
+      // ── Split into header + data rows (CSV-aware, respects quoted fields) ──────
+      // A naive text.split(/\r?\n/) would mis-count rows when quoted fields
+      // contain embedded newlines, causing inflated chunk counts and broken chunks.
+      function splitCsvRows(raw: string): string[] {
+        const csvRows: string[] = [];
+        let current = "";
+        let inQuote = false;
+        for (let i = 0; i < raw.length; i++) {
+          const ch = raw[i];
+          if (ch === '"') {
+            // Escaped quote inside a quoted field ("") — keep both chars
+            if (inQuote && raw[i + 1] === '"') { current += '""'; i++; continue; }
+            inQuote = !inQuote;
+            current += ch;
+          } else if (!inQuote && (ch === "\n" || ch === "\r")) {
+            if (ch === "\r" && raw[i + 1] === "\n") i++; // consume \r\n as one
+            csvRows.push(current);
+            current = "";
+          } else {
+            current += ch;
+          }
+        }
+        if (current) csvRows.push(current);
+        return csvRows;
+      }
+
+      const allLines = splitCsvRows(text);
       // Keep the raw header line; filter only truly blank data lines
       const headerLine = allLines[0] ?? "";
       const dataLines = allLines.slice(1).filter((l) => l.trim() !== "");
