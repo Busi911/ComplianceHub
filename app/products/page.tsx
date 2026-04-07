@@ -25,6 +25,7 @@ interface Product {
     currentPlasticG: number | null;
     currentPaperG: number | null;
     confidenceScore: number | null;
+    estimationMethod: string | null;
   } | null;
   _count: { samplingRecords: number };
 }
@@ -403,9 +404,8 @@ function ProductsPageInner() {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge
-                          status={
-                            product.packagingProfile?.status ?? "IMPORTED"
-                          }
+                          status={product.packagingProfile?.status ?? "IMPORTED"}
+                          estimationMethod={product.packagingProfile?.estimationMethod}
                           size="sm"
                         />
                       </td>

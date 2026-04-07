@@ -364,7 +364,7 @@ export default function ProductDetailPage() {
           <h1 className="text-xl font-bold text-gray-900 mt-1">{product.productName}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="font-mono text-sm text-gray-500">{product.ean}</span>
-            {product.packagingProfile && <StatusBadge status={product.packagingProfile.status} />}
+            {product.packagingProfile && <StatusBadge status={product.packagingProfile.status} estimationMethod={product.packagingProfile.estimationMethod} />}
             {saveSuccess && <span className="text-xs text-green-600">✓ Gespeichert</span>}
           </div>
         </div>
@@ -538,7 +538,7 @@ export default function ProductDetailPage() {
                 <div className="text-xs text-gray-500 font-medium mb-1">Methode</div>
                 <div className="text-xs font-mono text-gray-700 break-all">{product.packagingProfile.estimationMethod ?? "—"}</div>
                 <div className="mt-1">
-                  <StatusBadge status={product.packagingProfile.status} size="sm" />
+                  <StatusBadge status={product.packagingProfile.status} estimationMethod={product.packagingProfile.estimationMethod} size="sm" />
                 </div>
               </div>
             </div>

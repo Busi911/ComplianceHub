@@ -415,7 +415,7 @@ function SamplingPriorityInner() {
                     {p.brand ?? p.manufacturer ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={p.packagingProfile?.status ?? "IMPORTED"} size="sm" />
+                    <StatusBadge status={p.packagingProfile?.status ?? "IMPORTED"} estimationMethod={p.packagingProfile?.estimationMethod} size="sm" />
                   </td>
                   <td className="px-4 py-3 min-w-[120px]">
                     <ConfidenceBar score={p.packagingProfile?.confidenceScore ?? null} showLabel={false} />
@@ -500,7 +500,7 @@ function SamplingPriorityInner() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-50">
           <div className="bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-4 flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0 flex-1">
                 <span className="font-semibold text-sm">
                   {wiegeliste.length} Produkt{wiegeliste.length !== 1 ? "e" : ""} in der Wiegeliste
                 </span>
