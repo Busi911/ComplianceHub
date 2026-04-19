@@ -103,68 +103,84 @@ export async function estimatePackaging(
   // ── Tier 3.5: Category average from other products' manufacturer data ─────
   // Fills the gap when no sampling data exists but sibling products have MFR values.
   // E.g. 10 Ketchup products — 2 have mfrPlasticG → other 8 can use their average.
+  // Uses subcategory first (most specific), falls back to main category.
   if (product.category) {
-    const mfrProducts = await prisma.product.findMany({
-      where: {
-        category: product.category,
-        id: { not: productId },
-        samplingRecords: { none: {} },
-        OR: [{ mfrPlasticG: { not: null } }, { mfrPaperG: { not: null } }],
-      },
-      select: { id: true, mfrPlasticG: true, mfrPaperG: true },
-      take: 20,
-    });
+    const mfrCategoryFilters = product.subcategory
+      ? [{ subcategory: product.subcategory }, { category: product.category }]
+      : [{ category: product.category }];
 
-    if (mfrProducts.length > 0) {
-      const plasticValues = mfrProducts
-        .map((p) => p.mfrPlasticG)
-        .filter((v): v is number => v !== null);
-      const paperValues = mfrProducts
-        .map((p) => p.mfrPaperG)
-        .filter((v): v is number => v !== null);
+    for (const categoryFilter of mfrCategoryFilters) {
+      const mfrProducts = await prisma.product.findMany({
+        where: {
+          ...categoryFilter,
+          id: { not: productId },
+          samplingRecords: { none: {} },
+          OR: [{ mfrPlasticG: { not: null } }, { mfrPaperG: { not: null } }],
+        },
+        select: { id: true, mfrPlasticG: true, mfrPaperG: true },
+        take: 20,
+      });
 
-      return {
-        plasticG: plasticValues.length > 0 ? mean(plasticValues) : null,
-        paperG: paperValues.length > 0 ? mean(paperValues) : null,
-        confidenceScore: 0.25,
-        method: `category_mfr_avg_n${mfrProducts.length}`,
-        basedOnProductIds: mfrProducts.map((p) => p.id),
-      };
+      if (mfrProducts.length > 0) {
+        const plasticValues = mfrProducts
+          .map((p) => p.mfrPlasticG)
+          .filter((v): v is number => v !== null);
+        const paperValues = mfrProducts
+          .map((p) => p.mfrPaperG)
+          .filter((v): v is number => v !== null);
+
+        const level = "subcategory" in categoryFilter ? "subcategory" : "category";
+        return {
+          plasticG: plasticValues.length > 0 ? mean(plasticValues) : null,
+          paperG: paperValues.length > 0 ? mean(paperValues) : null,
+          confidenceScore: 0.25,
+          method: `${level}_mfr_avg_n${mfrProducts.length}`,
+          basedOnProductIds: mfrProducts.map((p) => p.id),
+        };
+      }
     }
   }
 
   // ── Tier 4: Category-level average ────────────────────────────────────────
+  // Uses subcategory first (most specific), falls back to main category.
   if (product.category) {
-    const categoryProducts = await prisma.product.findMany({
-      where: {
-        category: product.category,
-        id: { not: productId },
-        samplingRecords: { some: { isOutlier: false } },
-      },
-      include: {
-        samplingRecords: {
-          where: { isOutlier: false },
-          select: { measuredPlasticG: true, measuredPaperG: true },
+    const categoryFilters = product.subcategory
+      ? [{ subcategory: product.subcategory }, { category: product.category }]
+      : [{ category: product.category }];
+
+    for (const categoryFilter of categoryFilters) {
+      const categoryProducts = await prisma.product.findMany({
+        where: {
+          ...categoryFilter,
+          id: { not: productId },
+          samplingRecords: { some: { isOutlier: false } },
         },
-      },
-      take: 50,
-    });
+        include: {
+          samplingRecords: {
+            where: { isOutlier: false },
+            select: { measuredPlasticG: true, measuredPaperG: true },
+          },
+        },
+        take: 50,
+      });
 
-    if (categoryProducts.length > 0) {
-      const plasticValues = categoryProducts
-        .flatMap((p) => p.samplingRecords.map((r) => r.measuredPlasticG))
-        .filter((v): v is number => v !== null);
-      const paperValues = categoryProducts
-        .flatMap((p) => p.samplingRecords.map((r) => r.measuredPaperG))
-        .filter((v): v is number => v !== null);
+      if (categoryProducts.length > 0) {
+        const plasticValues = categoryProducts
+          .flatMap((p) => p.samplingRecords.map((r) => r.measuredPlasticG))
+          .filter((v): v is number => v !== null);
+        const paperValues = categoryProducts
+          .flatMap((p) => p.samplingRecords.map((r) => r.measuredPaperG))
+          .filter((v): v is number => v !== null);
 
-      return {
-        plasticG: plasticValues.length > 0 ? mean(plasticValues) : null,
-        paperG: paperValues.length > 0 ? mean(paperValues) : null,
-        confidenceScore: 0.2,
-        method: `category_avg_n${categoryProducts.length}`,
-        basedOnProductIds: categoryProducts.map((p) => p.id),
-      };
+        const level = "subcategory" in categoryFilter ? "subcategory" : "category";
+        return {
+          plasticG: plasticValues.length > 0 ? mean(plasticValues) : null,
+          paperG: paperValues.length > 0 ? mean(paperValues) : null,
+          confidenceScore: 0.2,
+          method: `${level}_avg_n${categoryProducts.length}`,
+          basedOnProductIds: categoryProducts.map((p) => p.id),
+        };
+      }
     }
   }
 

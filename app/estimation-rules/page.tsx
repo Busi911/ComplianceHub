@@ -68,7 +68,9 @@ function methodBadge(method: string | null) {
     manufacturer_data: "bg-green-50 text-green-700",
     similar_products: "bg-yellow-100 text-yellow-800",
     regression_gross_weight: "bg-blue-100 text-blue-800",
+    subcategory_mfr_avg: "bg-teal-100 text-teal-800",
     category_mfr_avg: "bg-teal-100 text-teal-800",
+    subcategory_avg: "bg-orange-100 text-orange-800",
     category_avg: "bg-orange-100 text-orange-800",
   };
   const key = Object.keys(colors).find((k) => method.startsWith(k));

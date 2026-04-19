@@ -96,6 +96,9 @@ function methodBadge(method: string | null): string {
   if (method.startsWith("manufacturer_data")) return "Hersteller-Angabe";
   if (method.startsWith("similar_products")) return "Ähnliche Produkte";
   if (method.startsWith("regression")) return "Regression";
+  if (method.startsWith("subcategory_mfr_avg")) return "Unterkategorie-Ø (MFR)";
+  if (method.startsWith("category_mfr_avg")) return "Kategorie-Ø (MFR)";
+  if (method.startsWith("subcategory_avg")) return "Unterkategorie-Ø";
   if (method.startsWith("category_avg")) return "Kategorie-Ø";
   return method;
 }
@@ -106,6 +109,9 @@ function methodColor(method: string | null): string {
   if (method.startsWith("manufacturer_data")) return "bg-blue-100 text-blue-800";
   if (method.startsWith("similar_products")) return "bg-yellow-100 text-yellow-800";
   if (method.startsWith("regression")) return "bg-purple-100 text-purple-800";
+  if (method.startsWith("subcategory_mfr_avg")) return "bg-teal-100 text-teal-800";
+  if (method.startsWith("category_mfr_avg")) return "bg-teal-100 text-teal-800";
+  if (method.startsWith("subcategory_avg")) return "bg-orange-100 text-orange-800";
   if (method.startsWith("category_avg")) return "bg-orange-100 text-orange-800";
   return "bg-gray-100 text-gray-600";
 }
