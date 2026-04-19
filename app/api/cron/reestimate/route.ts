@@ -125,21 +125,56 @@ export async function GET(request: NextRequest) {
     samplingRecords: { select: { id: true }, take: 1 },
   } as const;
 
-  // Phase 1: Products changed in the last 24 h — clean up what wasn't re-estimated yet
-  const phase1 = await prisma.product.findMany({
-    where: { updatedAt: { gte: yesterday }, OR: eligibleOr },
-    select: selectFields,
-    orderBy: { updatedAt: "desc" },
-    take: LIMIT,
+  // Phase 0: Products in categories that received new measurements in the last 24 h.
+  // These benefit most immediately from re-estimation since the category now has
+  // fresh reference data that the cascade may not have fully propagated (cascade cap: 100).
+  const recentlySampledProducts = await prisma.samplingRecord.findMany({
+    where: { sampledAt: { gte: yesterday } },
+    select: { productId: true },
+    distinct: ["productId"],
   });
+  const recentlySampledIds = recentlySampledProducts.map((r) => r.productId);
+
+  const recentCategories = recentlySampledIds.length > 0
+    ? (await prisma.product.findMany({
+        where: { id: { in: recentlySampledIds }, category: { not: null } },
+        select: { category: true },
+        distinct: ["category"],
+      })).map((p) => p.category).filter(Boolean) as string[]
+    : [];
+
+  const phase0 = recentCategories.length > 0
+    ? await prisma.product.findMany({
+        where: {
+          category: { in: recentCategories },
+          OR: eligibleOr,
+        },
+        select: selectFields,
+        orderBy: { packagingProfile: { updatedAt: "asc" } },
+        take: LIMIT,
+      })
+    : [];
+
+  const phase0Ids = phase0.map((p) => p.id);
+  const remaining0 = LIMIT - phase0.length;
+
+  // Phase 1: Products changed in the last 24 h — clean up what wasn't re-estimated yet
+  const phase1 = remaining0 > 0
+    ? await prisma.product.findMany({
+        where: { updatedAt: { gte: yesterday }, id: { notIn: phase0Ids }, OR: eligibleOr },
+        select: selectFields,
+        orderBy: { updatedAt: "desc" },
+        take: remaining0,
+      })
+    : [];
 
   const phase1Ids = phase1.map((p) => p.id);
-  const remaining = LIMIT - phase1.length;
+  const remaining = remaining0 - phase1.length;
 
   // Phase 2a: Products with no profile at all (never estimated) — oldest first
   const noProfile = remaining > 0
     ? await prisma.product.findMany({
-        where: { id: { notIn: phase1Ids }, packagingProfile: null },
+        where: { id: { notIn: [...phase0Ids, ...phase1Ids] }, packagingProfile: null },
         select: selectFields,
         orderBy: { createdAt: "asc" },
         take: remaining,
@@ -153,7 +188,7 @@ export async function GET(request: NextRequest) {
   const backfill = remaining2 > 0
     ? await prisma.product.findMany({
         where: {
-          id: { notIn: [...phase1Ids, ...noProfileIds] },
+          id: { notIn: [...phase0Ids, ...phase1Ids, ...noProfileIds] },
           packagingProfile: { status: { in: [PackagingStatus.IMPORTED, PackagingStatus.ESTIMATED] } },
         },
         select: selectFields,
@@ -162,7 +197,8 @@ export async function GET(request: NextRequest) {
       })
     : [];
 
-  const products = [...phase1, ...noProfile, ...backfill];
+  const products = [...phase0, ...phase1, ...noProfile, ...backfill];
+  const phase0Count = phase0.length;
   const phase1Count = phase1.length;
   const phase2Count = noProfile.length + backfill.length;
 
@@ -263,8 +299,8 @@ export async function GET(request: NextRequest) {
   });
 
   console.log(
-    `[cron/reestimate] phase1=${phase1Count} (recent changes) phase2=${phase2Count} (backfill) | ${updated} updated, ${noChange} no-change, ${skipped} no-data, ${errors} errors / ${total} eligible — ${durationMs}ms`
+    `[cron/reestimate] phase0=${phase0Count} (fresh categories) phase1=${phase1Count} (recent changes) phase2=${phase2Count} (backfill) | ${updated} updated, ${noChange} no-change, ${skipped} no-data, ${errors} errors / ${total} eligible — ${durationMs}ms`
   );
 
-  return NextResponse.json({ cronRunId: cronRun.id, total, updated, noChange, skipped, errors, durationMs, phase1Count, phase2Count });
+  return NextResponse.json({ cronRunId: cronRun.id, total, updated, noChange, skipped, errors, durationMs, phase0Count, phase1Count, phase2Count });
 }

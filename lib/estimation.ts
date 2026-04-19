@@ -507,7 +507,7 @@ export async function redetectOutliersForProduct(productId: string): Promise<voi
  * A: Re-Estimation Cascade
  * After a new weighing is recorded, re-estimate all ESTIMATED products in the same
  * category so they immediately benefit from the new reference data.
- * Capped at 40 products. Returns the count of products actually updated.
+ * Capped at 100 products. Returns the count of products actually updated.
  */
 export async function cascadeReestimateCategory(
   category: string,
@@ -527,7 +527,7 @@ export async function cascadeReestimateCategory(
       ],
     },
     include: { packagingProfile: true },
-    take: 40,
+    take: 100,
   });
 
   let updatedCount = 0;
