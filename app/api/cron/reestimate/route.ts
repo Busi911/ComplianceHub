@@ -6,7 +6,7 @@ import { PackagingStatus } from "@prisma/client";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-const LIMIT = 150;
+const LIMIT = 2000;
 
 // Vercel Cron Jobs call this route with Authorization: Bearer <CRON_SECRET>
 export async function GET(request: NextRequest) {
