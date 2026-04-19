@@ -13,10 +13,16 @@ export interface EstimationResult {
 /**
  * Main estimation function for a product.
  * Priority:
- * 1. Own SamplingRecords (outliers excluded) — highest confidence
- * 2. Similar products by category/subcategory/brand/weight/price/volume
- * 3. Linear regression: grossWeightG → plasticG in category (r² ≥ 0.4, n ≥ 5)
- * 4. Category average — lowest confidence
+ * 1.  Own SamplingRecords (outliers excluded) — highest confidence
+ * 1.5 Manufacturer-provided mfrPlasticG / mfrPaperG
+ * 2.  Similar products by category/subcategory/brand/weight/price/volume
+ * 2.5 Packaging-fraction from net weight: packagingG = grossWeightG − netWeightG,
+ *     apply mean plastic/paper fraction from sampled reference products
+ * 3.  Linear regression within category:
+ *     - preferred predictor: packagingWeightG (gross − net) when available
+ *     - fallback predictor:  grossWeightG
+ * 3.5 Category average of manufacturer data
+ * 4.  Category-level sampling average — lowest confidence
  */
 export async function estimatePackaging(
   productId: string
@@ -90,12 +96,34 @@ export async function estimatePackaging(
     };
   }
 
-  // ── Tier 3: Regression model (grossWeightG → plasticG) within category ────
-  if (product.category && product.grossWeightG) {
+  // ── Tier 2.5: Packaging-fraction estimation from known net weight ─────────
+  // If we know packagingG = gross − net, apply the mean plastic/paper fraction
+  // observed in sampled reference products — a much tighter physical constraint
+  // than regressing on gross weight alone.
+  if (product.grossWeightG && product.netWeightG) {
+    const packagingG = product.grossWeightG - product.netWeightG;
+    if (packagingG > 0) {
+      const fractionResult = await tryPackagingFractionEstimate(
+        product.category,
+        product.subcategory,
+        productId,
+        packagingG
+      );
+      if (fractionResult) return fractionResult;
+    }
+  }
+
+  // ── Tier 3: Regression model within category ──────────────────────────────
+  // Priority: packagingWeightG (gross−net) → grossWeightG → netWeightG alone.
+  // netWeightG alone is weaker but still informative: a 5 kg product ships
+  // in more packaging than a 1 kg product even without knowing the exact
+  // gross weight.
+  if (product.category && (product.grossWeightG || product.netWeightG)) {
     const regressionResult = await tryRegressionEstimate(
       product.category,
       productId,
-      product.grossWeightG
+      product.grossWeightG,
+      product.netWeightG
     );
     if (regressionResult) return regressionResult;
   }
@@ -188,25 +216,118 @@ export async function estimatePackaging(
 }
 
 /**
+ * Tier 2.5 helper: apply the mean plastic/paper fraction from sampled reference
+ * products to a known packagingG = grossWeightG − netWeightG.
+ * Tries subcategory first, falls back to category.
+ * Requires ≥2 reference products with both gross/net weights and sampling records.
+ */
+async function tryPackagingFractionEstimate(
+  category: string | null,
+  subcategory: string | null,
+  excludeId: string,
+  packagingG: number
+): Promise<EstimationResult | null> {
+  if (!category) return null;
+
+  const filters = subcategory
+    ? [{ subcategory } as Record<string, unknown>, { category } as Record<string, unknown>]
+    : [{ category } as Record<string, unknown>];
+
+  for (const filter of filters) {
+    const refProducts = await prisma.product.findMany({
+      where: {
+        ...filter,
+        id: { not: excludeId },
+        grossWeightG: { not: null },
+        netWeightG: { not: null },
+        samplingRecords: { some: { isOutlier: false } },
+      },
+      select: {
+        id: true,
+        grossWeightG: true,
+        netWeightG: true,
+        samplingRecords: {
+          where: { isOutlier: false },
+          select: { measuredPlasticG: true, measuredPaperG: true },
+        },
+      },
+      take: 50,
+    });
+
+    const plasticFractions: number[] = [];
+    const paperFractions: number[] = [];
+    const ids: string[] = [];
+
+    for (const p of refProducts) {
+      if (!p.grossWeightG || !p.netWeightG) continue;
+      const refPackW = p.grossWeightG - p.netWeightG;
+      if (refPackW <= 0) continue;
+
+      const pVals = p.samplingRecords
+        .map((r) => r.measuredPlasticG)
+        .filter((v): v is number => v !== null);
+      if (pVals.length === 0) continue;
+
+      plasticFractions.push(mean(pVals) / refPackW);
+      ids.push(p.id);
+
+      const paVals = p.samplingRecords
+        .map((r) => r.measuredPaperG)
+        .filter((v): v is number => v !== null);
+      if (paVals.length > 0) paperFractions.push(mean(paVals) / refPackW);
+    }
+
+    if (plasticFractions.length < 2) continue;
+
+    const level = "subcategory" in filter ? "subcategory" : "category";
+    const confidence = Math.min(
+      (level === "subcategory" ? 0.50 : 0.42) + plasticFractions.length * 0.02,
+      level === "subcategory" ? 0.65 : 0.60
+    );
+
+    return {
+      plasticG: Math.round(mean(plasticFractions) * packagingG * 10) / 10,
+      paperG:
+        paperFractions.length > 0
+          ? Math.round(mean(paperFractions) * packagingG * 10) / 10
+          : null,
+      confidenceScore: confidence,
+      method: `${level}_packaging_fraction_n${plasticFractions.length}`,
+      basedOnProductIds: ids,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Tier 3 helper: linear regression on category data.
- * Requires ≥5 data points and r² ≥ 0.4.
- * Confidence = 0.20 + r2 × 0.50  (range: 0.40–0.70)
+ * Three predictor strategies tried in order:
+ *   1. packagingWeightG = gross − net  (best physical signal, r² ≥ 0.4/0.3)
+ *   2. grossWeightG alone              (classic fallback,      r² ≥ 0.4/0.3)
+ *   3. netWeightG alone                (last resort when only net is known,
+ *                                       weaker but still informative — a 5 kg
+ *                                       product ships in more packaging than
+ *                                       a 1 kg product,         r² ≥ 0.35/0.25)
  */
 async function tryRegressionEstimate(
   category: string,
   excludeId: string,
-  grossWeightG: number
+  grossWeightG: number | null,
+  netWeightG?: number | null
 ): Promise<EstimationResult | null> {
+  // Single query covers all three strategies; each filters the relevant subset.
   const catProducts = await prisma.product.findMany({
     where: {
       category,
       id: { not: excludeId },
-      grossWeightG: { not: null },
       samplingRecords: { some: { isOutlier: false } },
+      OR: [{ grossWeightG: { not: null } }, { netWeightG: { not: null } }],
     },
     select: {
       id: true,
       grossWeightG: true,
+      netWeightG: true,
       samplingRecords: {
         where: { isOutlier: false },
         select: { measuredPlasticG: true, measuredPaperG: true },
@@ -215,59 +336,93 @@ async function tryRegressionEstimate(
     take: 100,
   });
 
-  const xs: number[] = [];
-  const plasticYs: number[] = [];
-  const paperYs: number[] = [];
-
-  for (const p of catProducts) {
-    if (!p.grossWeightG) continue;
-    const pVals = p.samplingRecords
-      .map((r) => r.measuredPlasticG)
-      .filter((v): v is number => v !== null);
-    if (pVals.length === 0) continue;
-    xs.push(p.grossWeightG);
-    plasticYs.push(mean(pVals));
-    const paVals = p.samplingRecords
-      .map((r) => r.measuredPaperG)
-      .filter((v): v is number => v !== null);
-    paperYs.push(paVals.length > 0 ? mean(paVals) : 0);
+  // Shared helper to run one regression attempt and return an EstimationResult.
+  function runRegression(
+    xs: number[],
+    plasticYs: number[],
+    paperYs: number[],
+    ids: string[],
+    predictX: number,
+    methodPrefix: string,
+    plasticR2Min: number,
+    paperR2Min: number,
+    maxConfidence: number,
+    confidenceBase: number
+  ): EstimationResult | null {
+    if (xs.length < 5) return null;
+    const pm = linearRegression(xs, plasticYs);
+    const paM = paperYs.length === xs.length ? linearRegression(xs, paperYs) : null;
+    const plasticOk = pm != null && pm.r2 >= plasticR2Min;
+    const paperOk = paM != null && paM.r2 >= paperR2Min;
+    if (!plasticOk && !paperOk) return null;
+    const predictedPlastic = plasticOk ? Math.max(0, pm!.a + pm!.b * predictX) : null;
+    if (plasticOk && predictedPlastic! < 0) return null;
+    const predictedPaper = paperOk ? Math.max(0, paM!.a + paM!.b * predictX) : null;
+    const bestR2 = Math.max(plasticOk ? pm!.r2 : 0, paperOk ? paM!.r2 : 0);
+    const confidence = Math.min(Math.round((confidenceBase + bestR2 * 0.5) * 100) / 100, maxConfidence);
+    const parts: string[] = [];
+    if (plasticOk) parts.push(`plastic_r2=${Math.round(pm!.r2 * 100)}`);
+    if (paperOk) parts.push(`paper_r2=${Math.round(paM!.r2 * 100)}`);
+    return {
+      plasticG: predictedPlastic !== null ? Math.round(predictedPlastic * 10) / 10 : null,
+      paperG: predictedPaper !== null ? Math.round(predictedPaper * 10) / 10 : null,
+      confidenceScore: confidence,
+      method: `${methodPrefix}_${parts.join("_")}_n${xs.length}`,
+      basedOnProductIds: ids,
+    };
   }
 
-  if (xs.length < 5) return null;
+  // ── Attempt 1: packagingWeightG = gross − net ─────────────────────────────
+  if (grossWeightG != null && netWeightG != null) {
+    const targetPackW = grossWeightG - netWeightG;
+    if (targetPackW > 0) {
+      const xs: number[] = [], pYs: number[] = [], paYs: number[] = [], ids: string[] = [];
+      for (const p of catProducts) {
+        if (!p.grossWeightG || !p.netWeightG) continue;
+        const refPack = p.grossWeightG - p.netWeightG;
+        if (refPack <= 0) continue;
+        const pv = p.samplingRecords.map((r) => r.measuredPlasticG).filter((v): v is number => v !== null);
+        if (pv.length === 0) continue;
+        xs.push(refPack); pYs.push(mean(pv)); ids.push(p.id);
+        const pav = p.samplingRecords.map((r) => r.measuredPaperG).filter((v): v is number => v !== null);
+        paYs.push(pav.length > 0 ? mean(pav) : 0);
+      }
+      const result = runRegression(xs, pYs, paYs, ids, targetPackW, "regression_packaging_weight", 0.4, 0.3, 0.72, 0.25);
+      if (result) return result;
+    }
+  }
 
-  const plasticModel = linearRegression(xs, plasticYs);
-  const paperModel = paperYs.length === xs.length ? linearRegression(xs, paperYs) : null;
+  // ── Attempt 2: grossWeightG alone ─────────────────────────────────────────
+  if (grossWeightG != null) {
+    const xs: number[] = [], pYs: number[] = [], paYs: number[] = [], ids: string[] = [];
+    for (const p of catProducts) {
+      if (!p.grossWeightG) continue;
+      const pv = p.samplingRecords.map((r) => r.measuredPlasticG).filter((v): v is number => v !== null);
+      if (pv.length === 0) continue;
+      xs.push(p.grossWeightG); pYs.push(mean(pv)); ids.push(p.id);
+      const pav = p.samplingRecords.map((r) => r.measuredPaperG).filter((v): v is number => v !== null);
+      paYs.push(pav.length > 0 ? mean(pav) : 0);
+    }
+    const result = runRegression(xs, pYs, paYs, ids, grossWeightG, "regression_gross_weight", 0.4, 0.3, 0.70, 0.20);
+    if (result) return result;
+  }
 
-  const plasticOk = plasticModel != null && plasticModel.r2 >= 0.4;
-  const paperOk = paperModel != null && paperModel.r2 >= 0.3;
+  // ── Attempt 3: netWeightG alone (weaker signal, lower r² threshold) ───────
+  if (netWeightG != null) {
+    const xs: number[] = [], pYs: number[] = [], paYs: number[] = [], ids: string[] = [];
+    for (const p of catProducts) {
+      if (!p.netWeightG) continue;
+      const pv = p.samplingRecords.map((r) => r.measuredPlasticG).filter((v): v is number => v !== null);
+      if (pv.length === 0) continue;
+      xs.push(p.netWeightG); pYs.push(mean(pv)); ids.push(p.id);
+      const pav = p.samplingRecords.map((r) => r.measuredPaperG).filter((v): v is number => v !== null);
+      paYs.push(pav.length > 0 ? mean(pav) : 0);
+    }
+    const result = runRegression(xs, pYs, paYs, ids, netWeightG, "regression_net_weight", 0.35, 0.25, 0.62, 0.15);
+    if (result) return result;
+  }
 
-  // Need at least one valid regression
-  if (!plasticOk && !paperOk) return null;
-
-  const predictedPlastic = plasticOk
-    ? Math.max(0, plasticModel!.a + plasticModel!.b * grossWeightG)
-    : null;
-  if (plasticOk && predictedPlastic! < 0) return null;
-
-  const predictedPaper = paperOk
-    ? Math.max(0, paperModel!.a + paperModel!.b * grossWeightG)
-    : null;
-
-  // Confidence based on whichever model(s) we have
-  const bestR2 = Math.max(plasticOk ? plasticModel!.r2 : 0, paperOk ? paperModel!.r2 : 0);
-  const confidence = Math.round((0.2 + bestR2 * 0.5) * 100) / 100;
-
-  const methodParts: string[] = [];
-  if (plasticOk) methodParts.push(`plastic_r2=${Math.round(plasticModel!.r2 * 100)}`);
-  if (paperOk) methodParts.push(`paper_r2=${Math.round(paperModel!.r2 * 100)}`);
-
-  return {
-    plasticG: predictedPlastic !== null ? Math.round(predictedPlastic * 10) / 10 : null,
-    paperG: predictedPaper !== null ? Math.round(predictedPaper * 10) / 10 : null,
-    confidenceScore: Math.min(confidence, 0.70),
-    method: `regression_gross_weight_${methodParts.join("_")}_n${xs.length}`,
-    basedOnProductIds: catProducts.map((p) => p.id),
-  };
+  return null;
 }
 
 interface ProductWithSampling {
@@ -316,6 +471,14 @@ async function findSimilarProductsWithSampling(
         lte: product.grossWeightG * 1.25,
       },
     });
+  if (product.category && product.netWeightG)
+    orConditions.push({
+      category: product.category,
+      netWeightG: {
+        gte: product.netWeightG * 0.75,
+        lte: product.netWeightG * 1.25,
+      },
+    });
   if (orConditions.length === 0 && product.category)
     orConditions.push({ category: product.category });
   if (orConditions.length === 0) return [];
@@ -362,6 +525,11 @@ function computeSimilarityConfidence(
     if (product.grossWeightG && similar.grossWeightG) {
       const d =
         Math.abs(product.grossWeightG - similar.grossWeightG) / product.grossWeightG;
+      if (d < 0.1) score += 2;
+      else if (d < 0.25) score += 1;
+    }
+    if (product.netWeightG && similar.netWeightG) {
+      const d = Math.abs(product.netWeightG - similar.netWeightG) / product.netWeightG;
       if (d < 0.1) score += 2;
       else if (d < 0.25) score += 1;
     }
