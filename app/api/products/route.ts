@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { estimatePackaging } from "@/lib/estimation";
+import { PackagingStatus } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -140,5 +142,81 @@ export async function GET(request: NextRequest) {
       { error: "Failed to load products" },
       { status: 500 }
     );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    const {
+      ean,
+      productName,
+      internalArticleNumber,
+      manufacturer,
+      brand,
+      category,
+      subcategory,
+      ekPrice,
+      netWeightG,
+      grossWeightG,
+      annualUnitsSold,
+    } = body;
+
+    if (!ean || typeof ean !== "string" || !ean.trim()) {
+      return NextResponse.json({ error: "EAN ist erforderlich" }, { status: 400 });
+    }
+    if (!productName || typeof productName !== "string" || !productName.trim()) {
+      return NextResponse.json({ error: "Produktname ist erforderlich" }, { status: 400 });
+    }
+
+    const existing = await prisma.product.findUnique({ where: { ean: ean.trim() } });
+    if (existing) {
+      return NextResponse.json({ error: "Ein Produkt mit dieser EAN existiert bereits" }, { status: 409 });
+    }
+
+    const parseNum = (v: unknown) => (v != null && v !== "" ? parseFloat(String(v)) : null);
+    const parseInt10 = (v: unknown) => (v != null && v !== "" ? parseInt(String(v), 10) : null);
+
+    const product = await prisma.product.create({
+      data: {
+        ean: ean.trim(),
+        productName: productName.trim(),
+        internalArticleNumber: internalArticleNumber?.trim() || null,
+        manufacturer: manufacturer?.trim() || null,
+        brand: brand?.trim() || null,
+        category: category?.trim() || null,
+        subcategory: subcategory?.trim() || null,
+        ekPrice: parseNum(ekPrice),
+        netWeightG: parseNum(netWeightG),
+        grossWeightG: parseNum(grossWeightG),
+        annualUnitsSold: parseInt10(annualUnitsSold),
+      },
+    });
+
+    await prisma.productPackagingProfile.create({
+      data: { productId: product.id, status: PackagingStatus.IMPORTED },
+    });
+
+    const estimateResult = await estimatePackaging(product.id);
+    if (estimateResult) {
+      await prisma.productPackagingProfile.update({
+        where: { productId: product.id },
+        data: {
+          status: PackagingStatus.ESTIMATED,
+          currentPlasticG: estimateResult.plasticG,
+          currentPaperG: estimateResult.paperG,
+          estimatedPlasticG: estimateResult.plasticG,
+          estimatedPaperG: estimateResult.paperG,
+          confidenceScore: estimateResult.confidenceScore,
+          estimationMethod: estimateResult.method,
+        },
+      });
+    }
+
+    return NextResponse.json(product, { status: 201 });
+  } catch (error) {
+    console.error("Product create error:", error);
+    return NextResponse.json({ error: "Failed to create product" }, { status: 500 });
   }
 }

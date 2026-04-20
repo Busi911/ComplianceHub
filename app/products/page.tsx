@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -52,6 +52,26 @@ function fmtEur(val: number | null): string {
   return `${val.toFixed(2)} €`;
 }
 
+interface NewProductForm {
+  ean: string;
+  productName: string;
+  internalArticleNumber: string;
+  manufacturer: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  ekPrice: string;
+  netWeightG: string;
+  grossWeightG: string;
+  annualUnitsSold: string;
+}
+
+const EMPTY_FORM: NewProductForm = {
+  ean: "", productName: "", internalArticleNumber: "", manufacturer: "",
+  brand: "", category: "", subcategory: "", ekPrice: "",
+  netWeightG: "", grossWeightG: "", annualUnitsSold: "",
+};
+
 function ProductsPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -60,6 +80,36 @@ function ProductsPageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"" | "full" | "slim">("");
+
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [newForm, setNewForm] = useState<NewProductForm>(EMPTY_FORM);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newForm),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setCreateError(json.error ?? "Fehler beim Anlegen");
+        return;
+      }
+      setShowNewModal(false);
+      setNewForm(EMPTY_FORM);
+      router.push(`/products/${json.id}`);
+    } catch {
+      setCreateError("Netzwerkfehler");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   const search = searchParams.get("search") ?? "";
   const category = searchParams.get("category") ?? "";
@@ -191,6 +241,12 @@ function ProductsPageInner() {
               "↓ Vollexport"
             )}
           </button>
+          <button
+            onClick={() => { setShowNewModal(true); setCreateError(null); }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700"
+          >
+            + Neues Produkt
+          </button>
           <Link
             href="/import"
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
@@ -199,6 +255,90 @@ function ProductsPageInner() {
           </Link>
         </div>
       </div>
+
+      {/* New product modal */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Neues Produkt anlegen</h2>
+              <button onClick={() => setShowNewModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <form onSubmit={handleCreate} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">EAN / GTIN *</label>
+                  <input required value={newForm.ean} onChange={e => setNewForm(f => ({ ...f, ean: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" placeholder="z.B. 4005808520404" />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Interne Art.-Nr.</label>
+                  <input value={newForm.internalArticleNumber} onChange={e => setNewForm(f => ({ ...f, internalArticleNumber: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Produktname *</label>
+                  <input required value={newForm.productName} onChange={e => setNewForm(f => ({ ...f, productName: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Hersteller</label>
+                  <input value={newForm.manufacturer} onChange={e => setNewForm(f => ({ ...f, manufacturer: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Marke</label>
+                  <input value={newForm.brand} onChange={e => setNewForm(f => ({ ...f, brand: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Kategorie</label>
+                  <input value={newForm.category} onChange={e => setNewForm(f => ({ ...f, category: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Unterkategorie</label>
+                  <input value={newForm.subcategory} onChange={e => setNewForm(f => ({ ...f, subcategory: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">EK-Preis (€)</label>
+                  <input type="number" step="0.01" min="0" value={newForm.ekPrice} onChange={e => setNewForm(f => ({ ...f, ekPrice: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Jahresabsatz (Stk.)</label>
+                  <input type="number" step="1" min="0" value={newForm.annualUnitsSold} onChange={e => setNewForm(f => ({ ...f, annualUnitsSold: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Netto-Gewicht (g)</label>
+                  <input type="number" step="0.1" min="0" value={newForm.netWeightG} onChange={e => setNewForm(f => ({ ...f, netWeightG: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Brutto-Gewicht (g)</label>
+                  <input type="number" step="0.1" min="0" value={newForm.grossWeightG} onChange={e => setNewForm(f => ({ ...f, grossWeightG: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                </div>
+              </div>
+              {createError && (
+                <div className="bg-red-50 border border-red-200 rounded p-2 text-red-700 text-sm">{createError}</div>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowNewModal(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                  Abbrechen
+                </button>
+                <button type="submit" disabled={creating}
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60">
+                  {creating ? "Anlegen…" : "Produkt anlegen"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-wrap gap-3">
