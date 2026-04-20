@@ -469,6 +469,7 @@ function ProductsPageInner() {
                     manufacturer: product.manufacturer ?? undefined,
                     brand: product.brand ?? undefined,
                     category: product.category ?? undefined,
+                    subcategory: product.subcategory ?? undefined,
                     ekPrice: product.ekPrice,
                     netWeightG: product.netWeightG,
                     grossWeightG: product.grossWeightG,
